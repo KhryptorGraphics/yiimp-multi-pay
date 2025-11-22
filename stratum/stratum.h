@@ -75,6 +75,8 @@ extern CommonList g_list_source;
 
 extern bool is_kawpow;
 extern bool is_firopow;
+extern bool is_phihash;
+extern bool is_meowpow;
 
 extern int g_tcp_port;
 
@@ -149,6 +151,7 @@ extern volatile bool g_exiting;
 #include "kawpow/kawpow.h"
 #include "firopow/hash.h"
 #include "firopow/overrides.h"
+#include "phihash/hash.h"
 
 extern YAAMP_DB *g_db;
 extern YAAMP_ALGO g_algos[];
@@ -281,5 +284,6 @@ void sha3d_hash_hex(const char *input, char *output, unsigned int len);
 #include "algos/skydoge.h"
 #include "algos/equihash.h"
 #include "algos/flex.h"
+#include "algos/rinhash.h"
 
 bool validate_hashfunctions();

@@ -87,6 +87,8 @@ void *monitor_thread(void *p);
 
 bool is_kawpow = false;
 bool is_firopow = false;
+bool is_phihash = false;
+bool is_meowpow = false;
 
 ////////////////////////////////////////////////////////////////////////////////////////
 
@@ -133,6 +135,7 @@ YAAMP_ALGO g_algos[] =
 	{"anime", anime_hash, 1, 0, 0},
 	{"argon2d250", argon2d_crds_hash, 0x10000, 0, 0 }, // Credits Argon2d Implementation
 	{"argon2d500", argon2d_dyn_hash, 0x10000, 0, 0 }, // Dynamic Argon2d Implementation
+	{"argon2d1000", argon2d1000_hash, 0x10000, 0, 0 }, // Argon2d1000 Implementation
 	{"argon2d16000", argon2d16000_hash, 0x10000, 0, 0 }, // Argon2d16000 Implementation
 	{"astralhash", astralhash_hash, 0x100, 0, 0},
 	{"aurum", aurum_hash, 0x1000, 0, 0},
@@ -170,6 +173,7 @@ YAAMP_ALGO g_algos[] =
 	{"hmq1725", hmq17_hash, 0x10000, 0, 0},
 	{"honeycomb", beenode_hash, 0x10000, 0, 0},
 	{"hsr", hsr_hash, 1, 0, 0},
+	{"interchained", interchained_hash, 0x10000, 0, 0 },
 	{"jeonghash", jeonghash_hash, 0x100, 0, 0},
 	{"jha", jha_hash, 0x10000, 0},
 	{"kawpow", sha256_double_hash, 1, 0, 0},
@@ -186,6 +190,7 @@ YAAMP_ALGO g_algos[] =
 	{"lyra2z330", lyra2z330_hash, 0x100, 0, 0},
 	{"m7m", m7m_hash, 0x10000, 0, 0},
 	{"memehash", meme_hash, 1, 0, 0}, /*PepePow Algo*/
+	{"meowpow", sha256_double_hash, 1, 0, 0},
 	{"megabtx", megabtx_hash, 0x100, 0, 0}, /* Bitcore New Algo*/
 	{"megamec", megamec_hash, 0x100, 0, 0}, /* Megacoin New Algo*/
 	{"mike", mike_hash, 0x10000, 0, 0},
@@ -200,6 +205,7 @@ YAAMP_ALGO g_algos[] =
 	{"phi", phi_hash, 1, 0, 0},
 	{"phi2", phi2_hash, 0x100, 0, 0},
 	{"phi5", phi5_hash, 1, 0, 0},
+	{"phihash", sha256_double_hash, 1, 0, 0},
 	{"pipe", pipe_hash, 1,0,0},
 	{"polytimos", polytimos_hash, 1, 0, 0},
 	{"power2b", power2b_hash, 0x10000, 0, 0 },
@@ -207,6 +213,7 @@ YAAMP_ALGO g_algos[] =
 	{"qubit", qubit_hash, 1, 0, 0},
 	{"rainforest", rainforest_hash, 0x100, 0, 0},
 	{"renesis", renesis_hash, 1, 0, 0},
+	{"rinhash", rinhash_hash, 1, 0, 0},
 	{"scrypt", scrypt_hash, 0x10000, 0, 0},
 	{"scryptn", scryptn_hash, 0x10000, 0, 0},
 	{"sha256", sha256_double_hash, 1, 0, 0},
@@ -266,6 +273,7 @@ YAAMP_ALGO g_algos[] =
 	{"yespowerURX", yespowerURX_hash, 0x10000, 0, 0 }, //UraniumX[URX] 
 	{"yespowerMGPC", yespowerMGPC_hash, 0x10000, 0, 0 }, //Magpiecoin[MGPC] 
 	{"yespowerARWN", yespowerARWN_hash, 0x10000, 0, 0 }, //Arowanacoin[ARWN] 
+	{"yespowerADVC", yespowerADVC_hash, 0x10000, 0, 0 },  
 	{"whirlcoin", whirlpool_hash, 1, 0, sha256_hash_hex }, /* old sha merkleroot */
 	{"whirlpool", whirlpool_hash, 1, 0 }, /* sha256d merkleroot */
 	{"whirlpoolx", whirlpoolx_hash, 1, 0, 0},
@@ -373,10 +381,21 @@ int main(int argc, char **argv)
 	if(!g_current_algo) yaamp_error("invalid algo");
 	if(!g_current_algo->hash_function) yaamp_error("no hash function");
 
-	if (!strcmp(g_current_algo->name,"kawpow")) {
+	if (!strcmp(g_current_algo->name,"kawpow"))
+	{
 		is_kawpow = true;
-	} else if (!strcmp(g_current_algo->name,"firopow")) {
+	}
+	else if(!strcmp(g_current_algo->name,"firopow"))
+	{
 		is_firopow = true;
+	}
+	else if(!strcmp(g_current_algo->name,"phihash"))
+	{
+		is_phihash = true;
+	}
+	if (!strcmp(g_current_algo->name,"meowpow"))
+	{
+		is_meowpow = true;
 	}
 
 //	struct rlimit rlim_files = {0x10000, 0x10000};

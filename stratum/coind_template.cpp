@@ -10,7 +10,8 @@ void coind_getauxblock(YAAMP_COIND *coind)
 	   (strcmp(coind->symbol2, "XMY") == 0) ||
        (strcmp(coind->symbol, "QBC") == 0) ||
        (strcmp(coind->symbol2, "QBC") == 0) ||
-	   (strcmp(coind->symbol, "EAC") == 0)) {
+       (strcmp(coind->symbol, "EAC") == 0) ||
+	   (strcmp(coind->symbol, "LCN") == 0)) {
 		static char wallet_address[1028];
 		if (coind->wallet) sprintf(wallet_address, "[\"%s\"]", coind->wallet);
 
@@ -263,7 +264,7 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 	if (is_firopow) {
 		sprintf(params, "[{\"mode\":\"template\"},\"%s\"]", coind->wallet);
 	}
-	else if (is_kawpow) {
+	else if (is_kawpow || is_phihash || is_meowpow) {
 		sprintf(params, "[]");
 	}
 	else {
@@ -633,10 +634,12 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 	string merkleroot = merkle_with_first(templ->txsteps, doublehash);
 	strcpy(templ->merkleroot, merkleroot.c_str());
 
-	if (is_kawpow || is_firopow) {
+	if (is_kawpow || is_firopow || is_phihash || is_meowpow)
+	{
 		update_epoch(coind->id, templ->height);
 		templ->header_seed = get_kawpow_seed(templ->height);
-		if (is_kawpow) {
+		if (is_kawpow || is_phihash || is_meowpow) 
+		{
 			templ->header_hash = build_header_hash(templ);
 		}
 	}

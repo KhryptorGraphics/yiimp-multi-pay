@@ -180,6 +180,8 @@ void coinbase_create(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ, json_value *
 	if(coind->txmessage)
 		strcpy(eversion1, "02000000");
 
+	if(!strcmp(g_stratum_algo,"flex")) strcpy(eversion1, "08000000");
+
 	const char *coinbase_payload = json_get_string(json_result, "coinbase_payload");
 
 	if(coinbase_payload && strlen(coinbase_payload) > 0)
@@ -187,7 +189,8 @@ void coinbase_create(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ, json_value *
 
 	char script1[4*1024];
 	char script2[32];
-	if (is_kawpow || is_firopow) {
+	if (is_kawpow || is_firopow || is_phihash || is_meowpow)
+	{
 		// coinbase v_in only current height
 		sprintf(script1, "%s", eheight);
 		int script_len = strlen(script1)/2;
@@ -392,7 +395,7 @@ void coinbase_create(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ, json_value *
 		return;
 	}
 
-	else if(!strcmp(coind->symbol, "XZC")) //hardcoded everything
+	else if(!strcmp(coind->symbol, "FIRO")) //hardcoded everything
 	{
         char script_payee[1024];
         bool znode_masternode_enabled = json_get_bool(json_result, "znode_payments_started");
@@ -402,30 +405,24 @@ void coinbase_create(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ, json_value *
             json_int_t amount = json_get_int(znode_masternode, "amount");
             if (payee && amount) {
                 //debuglog("znode payee: %s\n", payee);
-                strcat(templ->coinb2, "06");
+                strcat(templ->coinb2, "04");
                 job_pack_tx(coind, templ->coinb2, available, NULL);
                 base58_decode(payee, script_payee);
                 job_pack_tx(coind, templ->coinb2, amount, script_payee);
             }
         } else {
-            strcat(templ->coinb2, "06");
+            strcat(templ->coinb2, "03");
             job_pack_tx(coind, templ->coinb2, available, NULL);
         }
-        base58_decode("aCAgTPgtYcA4EysU4UKC86EQd5cTtHtCcr", script_payee);
-        job_pack_tx(coind, templ->coinb2, 1 * 100000000, script_payee);
-        base58_decode("aHu897ivzmeFuLNB6956X6gyGeVNHUBRgD", script_payee);
-        job_pack_tx(coind, templ->coinb2, 1 * 100000000, script_payee);
-        base58_decode("aQ18FBVFtnueucZKeVg4srhmzbpAeb1KoN", script_payee);
-        job_pack_tx(coind, templ->coinb2, 1 * 100000000, script_payee);
-        base58_decode("a1HwTdCmQV3NspP2QqCGpehoFpi8NY4Zg3", script_payee);
-        job_pack_tx(coind, templ->coinb2, 3 * 100000000, script_payee);
-        base58_decode("a1kCCGddf5pMXSipLVD9hBG2MGGVNaJ15U", script_payee);
-        job_pack_tx(coind, templ->coinb2, 1 * 100000000, script_payee);
+        base58_decode("aLgRaYSFk6iVw2FqY1oei8Tdn2aTsGPVmP", script_payee);
+        job_pack_tx(coind, templ->coinb2, 0.9375 * 100000000, script_payee);
+        base58_decode("aFA2TbqG9cnhhzX5Yny2pBJRK5EaEqLCH7", script_payee);
+        job_pack_tx(coind, templ->coinb2, 0.625 * 100000000, script_payee);
         strcat(templ->coinb2, "00000000"); // locktime
         coind->reward = (double)available/100000000*coind->reward_mul;
         return;
     }
-	
+
 	else if(!strcmp(coind->symbol, "HXX")) //hardcoded everything
 	{
         char script_payee[1024];
@@ -628,6 +625,101 @@ void coinbase_create(YAAMP_COIND *coind, YAAMP_JOB_TEMPLATE *templ, json_value *
 			strcat(templ->coinb2, "00000000");
 			coind->reward = (double)available/100000000*coind->reward_mul;
 			return;
+    }
+
+	else if (!strcmp(coind->symbol, "ADVC"))
+	{
+		char payees[4];
+		int npayees = 2;
+		char script_dests[4096] = { 0 };
+
+		json_int_t coinbase_value = json_get_int(json_result, "coinbasevalue");
+		json_value *developer = json_get_object(json_result, "developer");
+
+		const char *developer_payee = json_get_string(developer, "payee");
+		json_int_t developer_amount = json_get_int(developer, "amount");
+		json_int_t miner_amount = coinbase_value;
+
+
+		char developer_script_payee[128] = { 0 };
+		base58_decode(developer_payee, developer_script_payee);
+
+		job_pack_tx(coind, script_dests, miner_amount, NULL);
+		job_pack_tx(coind, script_dests, developer_amount, developer_script_payee);
+
+		sprintf(payees, "%02x", npayees);
+		strcat(templ->coinb2, payees);
+		strcat(templ->coinb2, script_dests);
+		strcat(templ->coinb2, "00000000");
+
+		if (coinbase_payload && strlen(coinbase_payload) > 0)
+		{
+   			char coinbase_payload_size[18];
+	        ser_compactsize((unsigned int)(strlen(coinbase_payload) >> 1), coinbase_payload_size);
+	        strcat(templ->coinb2, coinbase_payload_size);
+	        strcat(templ->coinb2, coinbase_payload);
+		}
+
+		coind->reward = ((double)(miner_amount + developer_amount)) / 100000000 * coind->reward_mul;
+		return;
+	}
+
+    else if(!strcmp(coind->symbol, "KCN") || !strcmp(coind->symbol, "LCN"))
+	{
+		char outputs_count[4] = { 0 };
+        char devscript2[256] = { 0 };
+        char devscript_len[3] = { 0 };
+        unsigned int outputs = 2;
+        char dev_amount[32];
+        json_value *devreward = json_get_object(json_result, "coinbasedevreward");
+        json_int_t devvalue = json_get_int(devreward, "value");
+        const char *devscript = json_get_string(devreward, "scriptpubkey");
+        encode_tx_value(dev_amount, devvalue);
+        snprintf(devscript2, 255, "%s", devscript);
+        sprintf(devscript_len, "%02x", strlen(devscript2) >> 1);
+        if (templ->has_segwit_txs) outputs++;
+        sprintf(outputs_count, "%02x", outputs);
+        strcat(templ->coinb2, outputs_count);
+        job_pack_tx(coind, templ->coinb2, available, NULL);
+        coind->reward = (double)available/100000000*coind->reward_mul;
+        strcat(templ->coinb2, dev_amount);
+        strcat(templ->coinb2, devscript_len);
+        strcat(templ->coinb2, devscript2);
+        if (templ->has_segwit_txs) strcat(templ->coinb2, commitment);
+        strcat(templ->coinb2, "00000000");
+        return;
+    }
+
+    else if(!strcmp(coind->symbol, "CLORE")||!strcmp(coind->symbol, "CMS")||!strcmp(coind->symbol, "MEWC")||!strcmp(coind->symbol, "PHI"))
+    {
+        // Community address required in coinbase to avoid "bad-cb-amount" rejection
+
+        char script_payee[1024];
+        json_int_t coinbase_value = json_get_int(json_result, "coinbasevalue");
+        const char *community_address = json_get_string(json_result, "CommunityAutonomousAddress");
+        json_int_t community_amount = json_get_int(json_result, "CommunityAutonomousValue");
+
+        json_int_t miner_amount = coinbase_value;
+
+        base58_decode(community_address, script_payee);
+
+        // two outputs: miner + community
+        strcat(templ->coinb2, "02");
+
+        // miner output (pool)
+        job_pack_tx(coind, templ->coinb2, miner_amount, NULL);
+
+        // community output (autonomous address)
+        job_pack_tx(coind, templ->coinb2, community_amount, script_payee);
+
+		if (templ->has_segwit_txs) strcat(templ->coinb2, commitment);
+
+        strcat(templ->coinb2, "00000000"); // locktime
+        coind->reward = (double)miner_amount / 100000000 * coind->reward_mul;
+
+        debuglog("[%s] community fund added %s (%f)\n", coind->symbol, community_address, (double)community_amount/100000000);
+		debuglog("[%s] coinbase: %f\n", coind->symbol, coind->reward);
+        return;
     }
 
 	//=================================================================================================================

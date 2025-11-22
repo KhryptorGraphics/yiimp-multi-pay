@@ -1,5 +1,5 @@
 
-CC= gcc -no-pie
+CC= gcc -no-pie 
 
 CFLAGS= -g -march=native -I./
 SQLFLAGS= `mysql_config --cflags --libs`
@@ -16,7 +16,9 @@ SOURCES=stratum.cpp db.cpp coind.cpp coind_aux.cpp coind_template.cpp coind_subm
 	user.cpp object.cpp json.cpp base58.cpp humanize_number.cpp
 SOURCES_KAWPOW=kawpow/lib/keccak/keccak.c kawpow/lib/keccak/keccakf800.c kawpow/lib/keccak/keccakf1600.c kawpow/lib/ethash/primes.c \
 	kawpow/lib/ethash/ethash.cpp kawpow/lib/ethash/progpow.cpp kawpow/hash.cpp kawpow/kawpow.cpp \
-	firopow/lib/progpow.cpp firopow/overrides.cpp firopow/hash.cpp
+	firopow/lib/progpow.cpp firopow/overrides.cpp firopow/hash.cpp \
+	phihash/lib/progpow.cpp phihash/hash.cpp \
+	meowpow/lib/progpow.cpp meowpow/hash.cpp
 
 CFLAGS += -DHAVE_CURL
 SOURCES += rpc_curl.cpp
