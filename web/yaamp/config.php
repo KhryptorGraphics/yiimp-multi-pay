@@ -13,7 +13,10 @@ return array(
 	'layoutPath'=>'yaamp/ui',
 
 	'preload'=>array('log'),
-	'import'=>array('application.components.*'),
+	'import'=>array(
+		'application.components.*',
+		'application.models.*',
+	),
 
 	'components'=>array(
 
