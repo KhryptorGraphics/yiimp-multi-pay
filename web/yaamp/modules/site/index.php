@@ -99,7 +99,12 @@ if (!$list) {
             ':symbol' => $symbol
         ]);
 
-        $port = $port_db ? $port_db->port : '0000';
+        // Try coin-specific port first, then fall back to algo port
+        if ($port_db && $port_db->port) {
+            $port = $port_db->port;
+        } else {
+            $port = getAlgoPort($algo);
+        }
 
         // Add algorithm headings correctly
         if ($count == 0 || $algo != $algoheading) {

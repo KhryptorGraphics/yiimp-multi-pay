@@ -8,8 +8,8 @@ if (!$serverconfig) {
 }
 
 require_once($serverconfig);
-require_once('yaamp/defaultconfig.php');
-require_once('yaamp/ui/app.php');
+require_once(__DIR__.'/defaultconfig.php');
+require_once(__DIR__.'/ui/app.php');
 
 //$_SERVER['PATH_INFO'] = $_SERVER['REQUEST_URI'];
 
