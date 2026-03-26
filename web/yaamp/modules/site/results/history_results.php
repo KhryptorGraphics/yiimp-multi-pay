@@ -1,6 +1,5 @@
 <?php
 
-$mining = getdbosql('db_mining');
 $algo = user()->getState('yaamp-algo');
 $algo_unit = 'Mh';
 $algo_factor = yaamp_algo_mBTC_factor($algo);
@@ -8,7 +7,13 @@ if ($algo_factor == 0.001) $algo_unit = 'Kh';
 if ($algo_factor == 1000) $algo_unit = 'Gh';
 if ($algo_factor == 1000000) $algo_unit = 'Th';
 if ($algo_factor == 1000000000) $algo_unit = 'Ph';
-if($algo == 'all') return;
+if($algo == 'all') {
+	echo "<div class='main-left-box'>";
+	echo "<div class='main-left-title'>Pool Stats</div>";
+	echo "<div class='main-left-inner'>Select a specific algorithm to view pool history.</div>";
+	echo "</div></div><br>";
+	return;
+}
 
 echo "<div class='main-left-box'>";
 echo "<div class='main-left-title'>Pool Stats ($algo)</div>";
@@ -208,12 +213,8 @@ echo '</tr>';
 
 echo '</table>';
 
-
-echo '</div>';
-
 echo '<br>';
 echo '</div></div><br>';
-
 
 
 

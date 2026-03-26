@@ -38,7 +38,7 @@ to start container
 
 or as single command
 
-	podman run --name=yiimp --network=host -v ./config:/etc/yiimp ./log:/var/www/log -v ./log:/var/log/yiimp -v ./yiimp/web:/var/www/ -v ./log:/var/log/apache2 -v ./config/supervisord.conf:/etc/supervisor/conf.d/supervisord.conf yiimp
+	podman run --name=yiimp --network=host -v ./config:/etc/yiimp -v ./log:/var/www/log -v ./log:/var/log/yiimp -v ./web:/var/www/ -v ./log:/var/log/apache2 -v ./config/supervisord.conf:/etc/supervisor/conf.d/supervisord.conf yiimp
 
 inside the container starts supervisord for controlling the parts of pool altogether
 to start/stop each part head to http://localhost:8900/ or use cli

@@ -7,7 +7,7 @@
 
 <br>
 
-GOTO <a href="http://<?= YAAMP_SITE_URL ?>">YIIMP</a>
+GOTO <a href="<?= getFullServerName() ?>">YIIMP</a>
 
 <br><br><br><br><br>
 

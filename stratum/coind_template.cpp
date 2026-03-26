@@ -275,7 +275,7 @@ YAAMP_JOB_TEMPLATE *coind_create_template(YAAMP_COIND *coind)
 	else if(coind->usesegwit) strcpy(params, "[{\"rules\":[\"segwit\"]}]");
 
 	if(coind->usemweb) {
-		strcpy(params, "[{\"rules\":[\"segwit\",\"mweb\"]}]");
+		strcpy(params, "[{\"rules\":[\"mweb\",\"segwit\"]}]");
 		debuglog("%s mweb enabled\n", coind->symbol);
 	}
 

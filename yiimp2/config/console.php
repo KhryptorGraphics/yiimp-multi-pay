@@ -1,7 +1,11 @@
 <?php
 
 // include serverconfig
-require_once('/etc/yiimp/serverconfig.php');
+$serverconfig = getenv('YIIMP_SERVERCONFIG');
+if (!$serverconfig) {
+    $serverconfig = '/etc/yiimp/serverconfig.php';
+}
+require_once($serverconfig);
 
 if (defined('YIIMP_DEBUG') && (YIIMP_DEBUG === true)) {
     define('YII_DEBUG', true);

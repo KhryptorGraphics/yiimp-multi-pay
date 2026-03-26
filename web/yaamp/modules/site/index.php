@@ -14,6 +14,7 @@ $min_payout = floatval(YAAMP_PAYMENTS_MINI);
 $min_sunday = $min_payout / 10;
 
 $payout_freq = (YAAMP_PAYMENTS_FREQ / 3600) . " hours";
+$publicHostInfo = getFullServerName();
 ?>
 
 <div id='resume_update_button' style='color: #444; background-color: #ffd; border: 1px solid #eea;
@@ -156,12 +157,12 @@ if (!$list) {
 
 <ul>
 
-<li><b>API</b> - <a href='/site/api'>http://<?=YAAMP_SITE_URL?>/site/api</a></li>
-<li><b>Difficulty</b> - <a href='/site/diff'>http://<?=YAAMP_SITE_URL?>/site/diff</a></li>
+<li><b>API</b> - <a href='/site/api'><?= $publicHostInfo ?>/site/api</a></li>
+<li><b>Difficulty</b> - <a href='/site/diff'><?= $publicHostInfo ?>/site/diff</a></li>
 <?php
 if (YIIMP_PUBLIC_BENCHMARK):
 ?>
-<li><b>Benchmarks</b> - <a href='/site/benchmarks'>http://<?=YAAMP_SITE_URL?>/site/benchmarks</a></li>
+<li><b>Benchmarks</b> - <a href='/site/benchmarks'><?= $publicHostInfo ?>/site/benchmarks</a></li>
 <?php
 endif;
 ?>
@@ -169,7 +170,7 @@ endif;
 <?php
 if (YAAMP_ALLOW_EXCHANGE):
 ?>
-<li><b>Algo Switching</b> - <a href='/site/multialgo'>http://<?=YAAMP_SITE_URL?>/site/multialgo</a></li>
+<li><b>Algo Switching</b> - <a href='/site/multialgo'><?= $publicHostInfo ?>/site/multialgo</a></li>
 <?php
 endif;
 ?>

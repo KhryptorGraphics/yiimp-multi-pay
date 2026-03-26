@@ -2,7 +2,12 @@
 
 //define('YII_DEBUG', true);
 
-require_once('/etc/yiimp/serverconfig.php');
+$serverconfig = getenv('YIIMP_SERVERCONFIG');
+if (!$serverconfig) {
+	$serverconfig = '/etc/yiimp/serverconfig.php';
+}
+
+require_once($serverconfig);
 require_once('yaamp/defaultconfig.php');
 require_once('yaamp/ui/app.php');
 
@@ -37,5 +42,4 @@ catch(CException $e)
 
 //	send_email_alert('frontend', "frontend error", "a frontend error occured");
 }
-
 

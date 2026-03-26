@@ -21,6 +21,8 @@
 #include <ifaddrs.h>
 #include <dirent.h>
 #include <algorithm>
+#include <functional>
+#include <string>
 
 #include <iostream>
 #include <vector>

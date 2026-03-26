@@ -83,20 +83,37 @@ function downloadFile($url, &$size)
 
 function getServerName()
 {
-	if(strpos($_SERVER['SERVER_NAME'], ':'))
-		return substr($_SERVER['SERVER_NAME'], 0, strpos($_SERVER['SERVER_NAME'], ':'));
+	$server = arraySafeVal($_SERVER, 'HTTP_X_FORWARDED_HOST', arraySafeVal($_SERVER, 'SERVER_NAME', ''));
+	if (strpos($server, ','))
+		$server = trim(strtok($server, ','));
 
-	return $_SERVER['SERVER_NAME'];
+	if(strpos($server, ':'))
+		return substr($server, 0, strpos($server, ':'));
+
+	return $server;
 }
 
 function getFullServerName()
 {
-	if(isset($_SERVER['HTTPS']) && !strcasecmp($_SERVER['HTTPS'], 'on'))
+	$protocol = 'http';
+	$forwardedProto = trim(arraySafeVal($_SERVER, 'HTTP_X_FORWARDED_PROTO', ''));
+	if (!empty($forwardedProto)) {
+		$forwardedProto = trim(strtok($forwardedProto, ','));
+		if (!empty($forwardedProto))
+			$protocol = !strcasecmp($forwardedProto, 'https') ? 'https' : 'http';
+	}
+	else if(isset($_SERVER['HTTPS']) && !strcasecmp($_SERVER['HTTPS'], 'on'))
 		$protocol = 'https';
-	else
-		$protocol = 'http';
+	else if(arraySafeVal($_SERVER, 'SERVER_PORT') == 443)
+		$protocol = 'https';
 
-	return $protocol.'://'.$_SERVER['HTTP_HOST'];
+	$host = trim(arraySafeVal($_SERVER, 'HTTP_X_FORWARDED_HOST', ''));
+	if (!empty($host))
+		$host = trim(strtok($host, ','));
+	if (empty($host))
+		$host = arraySafeVal($_SERVER, 'HTTP_HOST', arraySafeVal($_SERVER, 'SERVER_NAME', 'localhost'));
+
+	return $protocol.'://'.$host;
 }
 
 ///////////////////

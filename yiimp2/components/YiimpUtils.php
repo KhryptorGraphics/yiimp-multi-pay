@@ -70,6 +70,28 @@ class YiimpUtils extends Component
 	return $algoslist;
 	}
 
+	public function getPublicHostInfo()
+	{
+		$headers = Yii::$app->request->headers;
+		$protocol = 'http';
+		$forwardedProto = trim((string) $headers->get('X-Forwarded-Proto', ''));
+		if (!empty($forwardedProto)) {
+			$forwardedProto = trim(strtok($forwardedProto, ','));
+			if (!empty($forwardedProto))
+				$protocol = !strcasecmp($forwardedProto, 'https') ? 'https' : 'http';
+		}
+		else if (Yii::$app->request->isSecureConnection)
+			$protocol = 'https';
+
+		$host = trim((string) $headers->get('X-Forwarded-Host', ''));
+		if (!empty($host))
+			$host = trim(strtok($host, ','));
+		if (empty($host))
+			$host = (string) $headers->get('Host', YAAMP_SITE_URL);
+
+		return $protocol.'://'.$host;
+	}
+
 	public function get_algos( $only_visible = false) {
 		
 		if ($only_visible) $storage_name = "yaamp_visible_algos";
