@@ -66,7 +66,7 @@ $total_solo_workers = 0;
 $showestimates = false;
 echo "<tbody>";
 
-$total_coins = 0; $total_users = 0; $total_workers = 0; $total_solo_workers = 0;
+$total_coins = 0; $total_users = 0; $total_workers = 0; $total_solo_workers = 0; $users_total = 0;
 foreach ($algos as $item)
 {
     $norm = $item[0];
@@ -154,6 +154,7 @@ foreach ($algos as $item)
         {
             $name = substr($coin->name, 0, 20);
             $symbol = $coin->getOfficialSymbol();
+            echo "<tr class='ssrow'>";
             echo "<td align='left' valign='top' style='font-size: .8em;'><img width='10' src='" . $coin->image . "'>  <b>$name ($coin->symbol)</b> </td>";
             $port_count = getdbocount('db_stratums', "algo=:algo and symbol=:symbol", array(':algo' => $algo,':symbol' => $coin->symbol));
             $port_db = getdbosql('db_stratums', "algo=:algo and symbol=:symbol", array(':algo' => $algo,':symbol' => $coin->symbol));
