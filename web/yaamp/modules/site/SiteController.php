@@ -48,6 +48,16 @@ class SiteController extends CommonController
 
 	protected function renderPartialAlgoMemcached($partial, $cachetime=15)
 	{
+		// Request-level counter (stored in static variable)
+		static $call_counter = 0;
+		$call_counter++;
+		
+		// For the first call, we'll handle everything
+		// For subsequent calls in the same request, we'll just return (prevents duplicates)
+		if ($call_counter > 1) {
+			return; // Don't output anything for duplicate calls
+		}
+		
 		$algo = user()->getState('yaamp-algo');
 		$memcache = controller()->memcache->memcache;
 		$memkey = $algo.'_'.str_replace('/','_',$partial);
@@ -58,13 +68,16 @@ class SiteController extends CommonController
 			return;
 		}
 
+		// Clean any existing buffers
+		while (ob_get_level() > 0) { ob_end_clean(); }
+		
+		// Capture view output
 		ob_start();
-		ob_implicit_flush(false);
 		$this->renderPartial($partial);
-		$html = ob_get_clean();
-		echo $html;
-
-		controller()->memcache->set($memkey, $html, $cachetime, MEMCACHE_COMPRESSED);
+		$raw = ob_get_clean();
+		
+		controller()->memcache->set($memkey, $raw, $cachetime, MEMCACHE_COMPRESSED);
+		echo $raw;
 	}
 
 	// Pool Status : public right panel with all algos and live stats
