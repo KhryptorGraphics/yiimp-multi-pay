@@ -26,21 +26,19 @@ return array(
 		'site'=>array(
 			'class'=>'modules.site.SiteController',
 		),
+		'explorer'=>array(
+			'class'=>'modules.explorer.ExplorerController',
+		),
 	),
 
 	'components'=>array(
 
-		// url() rules...
 		'urlManager'=>array(
 			'urlFormat'=>'path',
 			'showScriptName'=>false,
 			'appendParams'=>true,
 			'caseSensitive'=>true,
 			'rules'=>array(
-				// prevent /explorer/id/<num>/p1/v1/... -> /explorer/<num>?params...
-				'/explorer/<id:\d+>' => array('/explorer', 'urlFormat'=>'get'),
-				'explorer/<id:\d+>' => array('explorer', 'urlFormat'=>'get'),
-				// route site module actions
 				'' => 'site/index',
 				'site/<action:\w+>' => 'site/<action>',
 				'<controller:\w+>/<action:\w+>' => '<controller>/<action>',
@@ -59,50 +57,32 @@ return array(
 				array(
 					'class'=>'CFileLogRoute',
 					'levels'=>'error, warning',
-//					'levels'=>'debug, trace, error, warning',
 				),
-//				array(
-//					'class'=>'CProfileLogRoute',
-//					'report'=>'summary',
-//				),
 			),
-		),
-
-		'user'=>array(
-			'allowAutoLogin'=>true,
-			'loginUrl'=>array('site/login'),
-		),
-
-		'db'=>array(
-			'class'=>'CDbConnection',
-			'connectionString'=>"mysql:host=".YAAMP_DBHOST.";dbname=".YAAMP_DBNAME,
-
-			'username'=>YAAMP_DBUSER,
-			'password'=>YAAMP_DBPASSWORD,
-
-			'enableProfiling'=>false,
-			'charset'=>'utf8',
-			'schemaCachingDuration'=>3600,
 		),
 
 		'cache'=>array(
 			'class'=>'CMemCache',
-			'keyPrefix'=>'',
 			'servers'=>array(
 				array(
-					'host'=>'127.0.0.1',
-					'port'=> 11211,
-					'weight'=> 60,
+					'host'=>YIIMP_MEMCACHE_HOST,
+					'port'=>YIIMP_MEMCACHE_PORT,
+					'weight'=>100,
 				),
 			),
 		),
 
+		'db'=>array(
+			'connectionString'=>'mysql:host='.YIIMP_DBHOST.';dbname='.YIIMP_DBNAME,
+			'emulatePrepare'=>true,
+			'autoConnect'=>false,
+			'username'=>YIIMP_DBUSER,
+			'password'=>YIIMP_DBPASSWORD,
+			'charset'=>'utf8',
+			'tablePrefix'=>'yaamp_',
+			'enableParamLogging'=>true,
+		),
 	),
 
-
+	'params'=>array(),
 );
-
-
-
-
-
