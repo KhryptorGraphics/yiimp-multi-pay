@@ -8,14 +8,24 @@ return array(
 
 	'basePath'=>YAAMP_HTDOCS."/yaamp",
 	'extensionPath'=>YAAMP_HTDOCS.'/extensions',
-	'controllerPath'=>'yaamp/modules',
-	'viewPath'=>'yaamp/modules',
-	'layoutPath'=>'yaamp/ui',
+	'controllerPath'=>'modules',
+	'viewPath'=>'modules',
+	'layoutPath'=>'ui',
 
 	'preload'=>array('log'),
 	'import'=>array(
 		'application.components.*',
 		'application.models.*',
+	),
+
+	'aliases'=>array(
+		'modules'=>YAAMP_HTDOCS.'/yaamp/modules',
+	),
+
+	'controllerMap'=>array(
+		'site'=>array(
+			'class'=>'modules.site.SiteController',
+		),
 	),
 
 	'components'=>array(
@@ -30,11 +40,18 @@ return array(
 				// prevent /explorer/id/<num>/p1/v1/... -> /explorer/<num>?params...
 				'/explorer/<id:\d+>' => array('/explorer', 'urlFormat'=>'get'),
 				'explorer/<id:\d+>' => array('explorer', 'urlFormat'=>'get'),
+				// route site module actions
+				'' => 'site/index',
+				'site/<action:\w+>' => 'site/<action>',
+				'<controller:\w+>/<action:\w+>' => '<controller>/<action>',
+				'<controller:\w+>' => '<controller>',
 			),
 		),
 
 		'assetManager'=>array(
-			'basePath'=>YAAMP_HTDOCS."/assets"),
+			'basePath'=>YAAMP_HTDOCS."/assets",
+			'baseUrl'=>'/assets',
+		),
 
 		'log'=>array(
 			'class'=>'CLogRouter',
