@@ -19,6 +19,7 @@ function BackendUsersUpdate()
 				if($user->coinid == $coin->id)
 				{
 					$user->save();
+					yaamp_refresh_account_summary_balance($user);
 					continue;
 				}
 
@@ -27,24 +28,11 @@ function BackendUsersUpdate()
 				$b = $remote->validateaddress($user->username);
 				if(arraySafeVal($b,'isvalid'))
 				{
-					$old_balance = $user->balance;
-					if($user->balance > 0)
-					{
-						$coinref = getdbo('db_coins', $user->coinid);
-						if(!$coinref) {
-							if (YAAMP_ALLOW_EXCHANGE)
-								$coinref = getdbosql('db_coins', "symbol='BTC'");
-							else
-								continue;
-						}
-
-						$user->balance = $user->balance * $coinref->price / $coin->price;
-					}
-
 					$user->coinid = $coin->id;
 					$user->save();
+					yaamp_refresh_account_summary_balance($user);
 
-					debuglog("{$user->username} converted to {$user->balance} {$coin->symbol} (old: $old_balance)");
+					debuglog("{$user->username} ref coin changed to {$coin->symbol}");
 					continue;
 				}
 			}
@@ -61,10 +49,6 @@ function BackendUsersUpdate()
 			$b = $remote->validateaddress($user->username);
 			if(!arraySafeVal($b,'isvalid')) continue;
 
-			if ($old_usercoinid && $old_usercoinid != $coin->id) {
-				debuglog("{$user->username} set to {$coin->symbol}, balance {$user->balance} reset to 0");
-				$user->balance = 0;
-			}
 			$user->coinid = $coin->id;
 			break;
 		}
@@ -74,6 +58,7 @@ function BackendUsersUpdate()
 		}
 
 		$user->save();
+		yaamp_refresh_account_summary_balance($user);
 	}
 
 //	$delay=time()-60*60;
@@ -100,5 +85,4 @@ function BackendUsersUpdate()
 	$d1 = microtime(true) - $t1;
 	controller()->memcache->add_monitoring_function(__METHOD__, $d1);
 }
-
 

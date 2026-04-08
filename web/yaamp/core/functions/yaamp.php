@@ -330,19 +330,287 @@ function yaamp_profitability($coin)
 	return $btcmhd * $algo_unit_factor;
 }
 
+function yaamp_get_account_by_address($address)
+{
+	if (empty($address)) return null;
+
+	$address = trim(substr($address, 0, 128));
+	if (empty($address)) return null;
+
+	$user = getdbosql('db_accounts', "username=:ad", array(':ad'=>$address));
+	if ($user) return $user;
+
+	$account_id = dboscalar(
+		"SELECT account_id FROM account_addresses WHERE address=:ad ORDER BY account_id LIMIT 1",
+		array(':ad'=>$address)
+	);
+
+	if (!$account_id) return null;
+	return getdbo('db_accounts', (int) $account_id);
+}
+
+function yaamp_user_refcoin($user)
+{
+	if (!$user) return null;
+
+	$refcoin = null;
+	if (!empty($user->coinid))
+		$refcoin = getdbo('db_coins', $user->coinid);
+
+	if (!$refcoin && YAAMP_ALLOW_EXCHANGE)
+		$refcoin = getdbosql('db_coins', "symbol='BTC'");
+
+	if (!$refcoin)
+		$refcoin = getdbosql('db_coins', "symbol='BTC'");
+
+	return $refcoin;
+}
+
+function yaamp_get_account_address($user, $coinid)
+{
+	if (!$user || !$coinid) return null;
+	if (!is_object($user))
+		$user = getdbo('db_accounts', intval($user));
+	if (!$user) return null;
+
+	if ((int) $user->coinid === (int) $coinid && !empty($user->username))
+		return $user->username;
+
+	$row = getdbosql('db_account_addresses', "account_id=:uid AND coinid=:coinid", array(
+		':uid' => $user->id,
+		':coinid' => intval($coinid),
+	));
+	if (!$row) return null;
+
+	return $row->address;
+}
+
+function yaamp_user_has_coin_address($user, $coinid)
+{
+	return !empty(yaamp_get_account_address($user, $coinid));
+}
+
+function yaamp_get_account_coin_balance($userid, $coinid)
+{
+	if (empty($userid) || empty($coinid)) return 0.0;
+
+	return (double) dboscalar(
+		"SELECT balance FROM account_balances WHERE account_id=:uid AND coinid=:coinid",
+		array(':uid'=>intval($userid), ':coinid'=>intval($coinid))
+	);
+}
+
+function yaamp_set_account_coin_balance($userid, $coinid, $balance)
+{
+	if (empty($userid) || empty($coinid)) return 0.0;
+
+	$balance = (double) $balance;
+	if ($balance <= 0) {
+		dborun(
+			"DELETE FROM account_balances WHERE account_id=:uid AND coinid=:coinid",
+			array(':uid'=>intval($userid), ':coinid'=>intval($coinid))
+		);
+		return 0.0;
+	}
+
+	$now = time();
+	dborun(
+		"INSERT INTO account_balances (account_id, coinid, balance, created, updated) ".
+		"VALUES (:uid, :coinid, :balance, :now, :now) ".
+		"ON DUPLICATE KEY UPDATE balance=:balance, updated=:now",
+		array(
+			':uid' => intval($userid),
+			':coinid' => intval($coinid),
+			':balance' => $balance,
+			':now' => $now,
+		)
+	);
+
+	return $balance;
+}
+
+function yaamp_add_account_coin_balance($userid, $coinid, $delta)
+{
+	$current = yaamp_get_account_coin_balance($userid, $coinid);
+	return yaamp_set_account_coin_balance($userid, $coinid, $current + (double) $delta);
+}
+
+function yaamp_user_balance_summary($user)
+{
+	if (!$user) return 0.0;
+	if (!is_object($user))
+		$user = getdbo('db_accounts', intval($user));
+	if (!$user) return 0.0;
+
+	$list = dbolist(
+		"SELECT coinid, balance FROM account_balances WHERE account_id=:uid AND balance > 0",
+		array(':uid'=>$user->id)
+	);
+
+	if (empty($list))
+		return (double) $user->balance;
+
+	$total = 0.0;
+	foreach($list as $row)
+	{
+		$coin = getdbo('db_coins', $row['coinid']);
+		if (!$coin) continue;
+		$total += (double) yaamp_convert_amount_user($coin, (double) $row['balance'], $user);
+	}
+
+	return $total;
+}
+
+function yaamp_refresh_account_summary_balance($user)
+{
+	if (!$user) return 0.0;
+	if (!is_object($user))
+		$user = getdbo('db_accounts', intval($user));
+	if (!$user) return 0.0;
+
+	$user->balance = bitcoinvaluetoa(yaamp_user_balance_summary($user));
+	$user->save();
+	return (double) $user->balance;
+}
+
+function yaamp_convert_payouts_user($user, $where='1')
+{
+	if (!$user) return 0.0;
+
+	$rows = dbolist(
+		"SELECT IFNULL(idcoin, 0) AS coinid, SUM(amount) AS amount FROM payouts ".
+		"WHERE account_id=:uid AND $where GROUP BY idcoin",
+		array(':uid'=>$user->id)
+	);
+
+	$value = 0.0;
+	foreach($rows as $row)
+	{
+		$coinid = (int) $row['coinid'];
+		if (empty($coinid))
+			$coinid = (int) $user->coinid;
+
+		$coin = getdbo('db_coins', $coinid);
+		if (!$coin) continue;
+
+		$value += yaamp_convert_amount_user($coin, (double) $row['amount'], $user);
+	}
+
+	return $value;
+}
+
+function yaamp_get_user_coin_breakdown($user, $paid_since=0)
+{
+	if (!$user) return array();
+
+	$breakdown = array();
+	$coinids = array();
+
+	$earning_rows = dbolist(
+		"SELECT coinid, ".
+		"SUM(CASE WHEN status=0 THEN amount ELSE 0 END) AS immature, ".
+		"SUM(CASE WHEN status=1 THEN amount ELSE 0 END) AS confirmed ".
+		"FROM earnings WHERE userid=:uid GROUP BY coinid",
+		array(':uid'=>$user->id)
+	);
+	foreach($earning_rows as $row)
+	{
+		$coinid = (int) $row['coinid'];
+		if (!$coinid) continue;
+		$coinids[$coinid] = $coinid;
+		$breakdown[$coinid] = array(
+			'immature' => (double) $row['immature'],
+			'confirmed' => (double) $row['confirmed'],
+			'balance' => 0.0,
+			'paid' => 0.0,
+		);
+	}
+
+	$balance_rows = dbolist(
+		"SELECT coinid, balance FROM account_balances WHERE account_id=:uid AND balance > 0",
+		array(':uid'=>$user->id)
+	);
+	foreach($balance_rows as $row)
+	{
+		$coinid = (int) $row['coinid'];
+		if (!$coinid) continue;
+		$coinids[$coinid] = $coinid;
+		if (!isset($breakdown[$coinid])) {
+			$breakdown[$coinid] = array(
+				'immature' => 0.0,
+				'confirmed' => 0.0,
+				'balance' => 0.0,
+				'paid' => 0.0,
+			);
+		}
+		$breakdown[$coinid]['balance'] = (double) $row['balance'];
+	}
+
+	$payout_where = "account_id=:uid";
+	$params = array(':uid'=>$user->id);
+	if ($paid_since > 0) {
+		$payout_where .= " AND time >= :paid_since";
+		$params[':paid_since'] = intval($paid_since);
+	}
+	$payout_rows = dbolist(
+		"SELECT IFNULL(idcoin, 0) AS coinid, SUM(amount) AS paid FROM payouts WHERE $payout_where GROUP BY idcoin",
+		$params
+	);
+	foreach($payout_rows as $row)
+	{
+		$coinid = (int) $row['coinid'];
+		if (!$coinid)
+			$coinid = (int) $user->coinid;
+		if (!$coinid) continue;
+		$coinids[$coinid] = $coinid;
+		if (!isset($breakdown[$coinid])) {
+			$breakdown[$coinid] = array(
+				'immature' => 0.0,
+				'confirmed' => 0.0,
+				'balance' => 0.0,
+				'paid' => 0.0,
+			);
+		}
+		$breakdown[$coinid]['paid'] = (double) $row['paid'];
+	}
+
+	$results = array();
+	foreach($coinids as $coinid)
+	{
+		$coin = getdbo('db_coins', $coinid);
+		if (!$coin) continue;
+		$row = arraySafeVal($breakdown, $coinid, array(
+			'immature' => 0.0,
+			'confirmed' => 0.0,
+			'balance' => 0.0,
+			'paid' => 0.0,
+		));
+		$row['coin'] = $coin;
+		$row['address'] = yaamp_get_account_address($user, $coinid);
+		$row['total_unpaid'] = (double) $row['immature'] + (double) $row['confirmed'] + (double) $row['balance'];
+		$row['value'] = yaamp_convert_amount_user($coin, $row['total_unpaid'], $user);
+		$results[$coinid] = $row;
+	}
+
+	uasort($results, function($a, $b) {
+		return ($b['value'] <=> $a['value']);
+	});
+
+	return $results;
+}
+
 function yaamp_convert_amount_user($coin, $amount, $user)
 {
-	$refcoin = getdbo('db_coins', $user->coinid);
+	$refcoin = yaamp_user_refcoin($user);
 	$value = 0.;
-	if ($coin->id == $user->coinid) {
+	if ($refcoin && $coin->id == $refcoin->id) {
 		$value = $amount;
 	} else {
 		if (YAAMP_ALLOW_EXCHANGE) {
-			if(!$refcoin) $refcoin = getdbosql('db_coins', "symbol='BTC'");
 			if(!$refcoin || $refcoin->price <= 0) return 0;
 			$value = $amount * (($coin->auto_exchange)?$coin->price : 0.) / $refcoin->price;
 		} else if ($coin->price && $refcoin && $refcoin->price > 0.) {
-			$value = $amount * (($coin->auto_exchange)?$coin->price : 0.) / $refcoin->price;
+			$value = $amount * $coin->price / $refcoin->price;
 		}
 	}
 	
@@ -351,21 +619,20 @@ function yaamp_convert_amount_user($coin, $amount, $user)
 
 function yaamp_convert_earnings_user($user, $status)
 {
-	$refcoin = getdbo('db_coins', $user->coinid);
 	$value = 0.;
-	if ($refcoin && !$refcoin->auto_exchange) {
-		$value = dboscalar("SELECT sum(amount) FROM earnings WHERE $status AND userid={$user->id} and coinid={$user->coinid}");
-	} else if (YAAMP_ALLOW_EXCHANGE) {
-		if(!$refcoin) $refcoin = getdbosql('db_coins', "symbol='BTC'");
-		if(!$refcoin || $refcoin->price <= 0) return 0;
-		$value = dboscalar("SELECT sum(amount*price) FROM earnings WHERE $status AND userid={$user->id}");
-		$value = $value / $refcoin->price;
-	} else if ($refcoin && $refcoin->price > 0.) {
-		$value = dboscalar("SELECT sum(amount*price) FROM earnings WHERE $status AND userid={$user->id}");
-		$value = $value / $refcoin->price;
-	} else if ($user->coinid) {
-		$value = dboscalar("SELECT sum(amount) FROM earnings WHERE $status AND userid={$user->id} AND coinid=".$user->coinid);
+
+	$rows = dbolist(
+		"SELECT coinid, SUM(amount) AS amount FROM earnings WHERE $status AND userid=:uid GROUP BY coinid",
+		array(':uid'=>$user->id)
+	);
+
+	foreach($rows as $row)
+	{
+		$coin = getdbo('db_coins', $row['coinid']);
+		if (!$coin) continue;
+		$value += yaamp_convert_amount_user($coin, (double) $row['amount'], $user);
 	}
+
 	return $value;
 }
 

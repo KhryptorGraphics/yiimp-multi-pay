@@ -271,6 +271,8 @@ void db_save_user_coin_addresses(YAAMP_DB *db, YAAMP_CLIENT *client)
 	if (!client || !client->userid)
 		return;
 
+	std::map<std::string, std::string> validated_map;
+
 	if (client->coinid && client->username[0]) {
 		db_store_user_coin_address(db, client->userid, client->coinid, client->username);
 	}
@@ -296,7 +298,10 @@ void db_save_user_coin_addresses(YAAMP_DB *db, YAAMP_CLIENT *client)
 			continue;
 
 		db_store_user_coin_address(db, client->userid, coind->id, address);
+		validated_map[coind->symbol] = address;
 	}
+
+	client->coin_address_map.swap(validated_map);
 }
 
 void db_init_user_coinid(YAAMP_DB *db, YAAMP_CLIENT *client)

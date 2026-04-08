@@ -41,10 +41,8 @@ function getuserparam($address)
 {
 	if(empty($address)) return null;
 
-	$address = trim(substr($address, 0, 52));
-	$user = getdbosql('db_accounts', "username=:ad", array(':ad'=>$address));
-
-	return $user;
+	$address = trim(substr($address, 0, 128));
+	return yaamp_get_account_by_address($address);
 }
 
 function getrenterparam($address)

@@ -14,6 +14,7 @@ $show_details = getparam('showdetails');
 
 $user = getuserparam(getparam('address'));
 if(!$user) return;
+	$coin_rows = yaamp_get_user_coin_breakdown($user);
 
 WriteBoxHeader("Wallet: $user->username");
 
@@ -40,7 +41,8 @@ echo "<tr>";
 echo "<th></th>";
 echo "<th>Name</th>";
 echo "<th align=right>Immature</th>";
-echo "<th align=right>Confirmed</th>";
+echo "<th align=right>Mature</th>";
+echo "<th align=right>Balance</th>";
 echo "<th align=right>Total</th>";
 echo "<th align=right>Value*</th>";
 echo "</tr>";
@@ -52,40 +54,35 @@ if($show_details)
 {
 	$t1 = microtime(true);
 
-	$list = dbolist("select coinid from earnings where userid=$user->id group by coinid");
-	if(!count($list))
-		echo "<tr><td></td><td colspan=5><i>-none-</i></td></tr>";
+	if(!count($coin_rows))
+		echo "<tr><td></td><td colspan=6><i>-none-</i></td></tr>";
 
 	else
 	{
-		// sort by value
-		foreach($list as $item)
+		foreach($coin_rows as $row)
 		{
-			$coin = getdbo('db_coins', $item['coinid']);
+			$coin = $row['coin'];
 			if(!$coin) continue;
 
 			$name = substr($coin->name, 0, 12);
-
-			$confirmed = controller()->memcache->get_database_scalar("wallet_confirmed-$user->id-$coin->id",
-				"select sum(amount) from earnings where status=1 and userid=$user->id and coinid=$coin->id");
-
-			$unconfirmed = controller()->memcache->get_database_scalar("wallet_unconfirmed-$user->id-$coin->id",
-				"select sum(amount) from earnings where status=0 and userid=$user->id and coinid=$coin->id");
-
-			$total = $confirmed + $unconfirmed;
-		//	$value = bitcoinvaluetoa($total * $coin->price / $refcoin->price);
-			$value = bitcoinvaluetoa(yaamp_convert_amount_user($coin, $total, $user));
-
-			$confirmed = altcoinvaluetoa($confirmed);
-			$unconfirmed = altcoinvaluetoa($unconfirmed);
+			$total = $row['total_unpaid'];
+			$value = bitcoinvaluetoa($row['value']);
+			$confirmed = altcoinvaluetoa($row['confirmed']);
+			$unconfirmed = altcoinvaluetoa($row['immature']);
+			$cleared = altcoinvaluetoa($row['balance']);
 			$total = altcoinvaluetoa($total);
+			$address = arraySafeVal($row, 'address', '');
+			$address_html = !empty($address)
+				? '<br/><span style="font-size: .75em; font-family: monospace;">'.$address.'</span>'
+				: '<br/><span style="font-size: .75em; color: #b55;">no payout address</span>';
 
 			echo "<tr class='ssrow'>";
 			echo "<td width=18><img width=16 src='$coin->image'></td>";
-			echo "<td><b><a href='/site/block?id=$coin->id' title='$coin->version'>$name</a></b><span style='font-size: .8em'> ($coin->algo)</span></td>";
+			echo "<td><b><a href='/site/block?id=$coin->id' title='$coin->version'>$name</a></b><span style='font-size: .8em'> ($coin->algo)</span>$address_html</td>";
 
 			echo "<td align=right style='font-size: .8em;'>$unconfirmed</td>";
 			echo "<td align=right style='font-size: .8em;'>$confirmed</td>";
+			echo "<td align=right style='font-size: .8em;'>$cleared</td>";
 			echo "<td align=right style='font-size: .8em;'>$total</td>";
 			echo "<td align=right style='font-size: .8em;'>$value $refcoin->symbol</td>";
 
@@ -117,7 +114,7 @@ $total_pending = bitcoinvaluetoa($total_pending);
 if(!$show_details && $total_unsold > 0)
 {
 	echo '
-	<tr><td colspan="6" align="right">
+	<tr><td colspan="7" align="right">
 		<label style="font-size: .8em;">
 			<input type="checkbox" onclick="javascript:main_wallet_refresh_details()">
 			Show Details
@@ -140,6 +137,7 @@ echo '<br/><span style="font-size: .8em;"">(total pending)</span></b></td>';
 echo '<td valign="top" align="right" style="font-size: .8em;">'.$unconfirmed.'</td>';
 echo '<td valign="top" align="right" style="font-size: .8em;">'.$confirmed.'</td>';
 echo '<td valign="top" align="right" style="font-size: .8em;"></td>';
+echo '<td valign="top" align="right" style="font-size: .8em;"></td>';
 echo '<td valign="top" align="right" style="font-size: .8em;">'.$total_unsold.' '.$refcoin->symbol.'</td>';
 
 echo "</tr>";
@@ -152,16 +150,16 @@ if ($user->donation > 0) {
 } else if ($user->no_fees == 1) {
 	$fees_notice = 'Currently mining without pool fees.';
 }
-echo '<tr><td colspan="6" style="text-align:right; font-size: .8em;"><b>'.$fees_notice.'</b></td></tr>';
+echo '<tr><td colspan="7" style="text-align:right; font-size: .8em;"><b>'.$fees_notice.'</b></td></tr>';
 
 // ////////////////////////////////////////////////////////////////////////////
 
-$balance = bitcoinvaluetoa($user->balance);
+$balance = bitcoinvaluetoa(yaamp_user_balance_summary($user));
 //$balance_usd = number_format($user->balance*$mining->usdbtc*$refcoin->price, 3, '.', ' ');
 
 echo "<tr class='ssrow' style='border-top: 1px solid #eee;'>";
 echo "<td><img width=16 src='$refcoin->image'></td>";
-echo "<td colspan=3><b>Balance</b></td>";
+echo "<td colspan=4><b>Balance</b></td>";
 echo "<td align=right style='font-size: .8em;'><b></b></td>";
 echo "<td align=right style='font-size: .9em;'><b>$balance $refcoin->symbol</b></td>";
 echo "</tr>";
@@ -180,15 +178,12 @@ echo "</tr>";
 
 ////////////////////////////////////////////////////////////////////////////
 
-$total_paid = controller()->memcache->get_database_scalar("wallet_total_paid-$user->id",
-	"select sum(amount) from payouts where account_id=$user->id");
-
-$total_paid = bitcoinvaluetoa($total_paid);
+$total_paid = bitcoinvaluetoa(yaamp_convert_payouts_user($user));
 //$total_paid_usd = number_format($total_paid*$mining->usdbtc*$refcoin->price, 3, '.', ' ');
 
 echo "<tr class='ssrow' style='border-top: 1px solid #eee;'>";
 echo "<td><img width=16 src='$refcoin->image'></td>";
-echo "<td colspan=3><b>Total Paid</b></td>";
+echo "<td colspan=4><b>Total Paid</b></td>";
 echo "<td align=right style='font-size: .8em;'></td>";
 echo "<td align=right style='font-size: .9em;'><a href='javascript:main_wallet_tx()'>$total_paid $refcoin->symbol</a></td>";
 echo "</tr>";
@@ -202,7 +197,7 @@ $total_earned = bitcoinvaluetoa($total_unsold + $balance + $total_paid);
 
 echo "<tr class='ssrow' style='border-top: 3px solid #eee;'>";
 echo "<td><img width=16 src='$refcoin->image'></td>";
-echo "<td colspan=3><b>Total Earned</b></td>";
+echo "<td colspan=4><b>Total Earned</b></td>";
 echo "<td align=right style='font-size: .8em;'></td>";
 echo "<td align=right style='font-size: .9em;'>$total_earned $refcoin->symbol</td>";
 echo "</tr>";
@@ -238,7 +233,9 @@ echo "<table  class='dataGrid2'>";
 echo "<thead>";
 echo "<tr>";
 echo "<th align=right>Time</th>";
+echo "<th>Coin</th>";
 echo "<th align=right>Amount</th>";
+echo "<th>Address</th>";
 echo "<th>Tx</th>";
 echo "</tr>";
 echo "</thead>";
@@ -247,15 +244,18 @@ $total = 0; $firstid = 999999999;
 foreach($list as $payout)
 {
 	$d = datetoa2($payout->time);
+	$payout_coin = getdbo('db_coins', $payout->idcoin ? $payout->idcoin : $user->coinid);
 	$amount = bitcoinvaluetoa($payout->amount);
 	$firstid = min($firstid, (int) $payout->id);
 
 	echo '<tr class="ssrow">';
 	echo '<td align="right"><b>'.$d.' ago</b></td>';
-	echo '<td align="right"><b>'.$amount.'</b></td>';
+	echo '<td><b>'.($payout_coin ? $payout_coin->symbol : '').'</b></td>';
+	echo '<td align="right"><b>'.$amount.' '.($payout_coin ? $payout_coin->symbol : '').'</b></td>';
+	echo '<td style="font-family: monospace;">'.yaamp_get_account_address($user, $payout_coin ? $payout_coin->id : $user->coinid).'</td>';
 
 	$payout_tx = substr($payout->tx, 0, 36).'...';
-	$link = $refcoin->createExplorerLink($payout_tx, array('txid'=>$payout->tx), array(), true);
+	$link = $payout_coin ? $payout_coin->createExplorerLink($payout_tx, array('txid'=>$payout->tx), array(), true) : $payout_tx;
 
 	echo '<td style="font-family: monospace;">'.$link.'</td>';
 	echo '</tr>';
@@ -329,8 +329,6 @@ echo "</table><br>";
 echo "</div>";
 
 echo "</div><br>";
-
-
 
 
 

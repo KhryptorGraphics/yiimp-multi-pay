@@ -93,7 +93,7 @@ class PayoutCommand extends CConsoleCommand
 		$dbPayouts = new db_payouts;
 		$min_payout = max($coin->txfee, floatval(YAAMP_PAYMENTS_MINI));
 		$failed_payouts = $dbPayouts->with('account')->findAll(array(
-			'condition'=>"tx IS NULL AND amount > $min_payout AND account.coinid = ".$coin->id,
+			'condition'=>"tx IS NULL AND amount > $min_payout AND idcoin = ".$coin->id,
 			'order'=>'time DESC',
 		));
 
@@ -112,8 +112,8 @@ class PayoutCommand extends CConsoleCommand
 
 		// Get users using the coin...
 		$users = dbolist("SELECT DISTINCT A.id AS userid, A.username AS username ".
-			"FROM accounts A LEFT JOIN coins C ON C.id = A.coinid ".
-			"WHERE A.coinid={$coin->id} AND (A.balance > 0.0 $condOr)"
+			"FROM accounts A INNER JOIN account_balances B ON B.account_id = A.id ".
+			"WHERE B.coinid={$coin->id} AND (B.balance > 0.0 $condOr)"
 		);
 		$ids = array();
 		foreach ($users as $uids) {
@@ -164,7 +164,8 @@ class PayoutCommand extends CConsoleCommand
 				$time = arraySafeVal($tx,'time');
 				if ($time < $since) continue;
 				$match = false;
-				if (arraySafeVal($tx,'category') == 'send' && arraySafeVal($tx,'address') == $user_addr) {
+				$payout_address = yaamp_get_account_address($uid, $coin->id);
+				if (arraySafeVal($tx,'category') == 'send' && arraySafeVal($tx,'address') == $payout_address) {
 					$amount = abs(arraySafeVal($tx,'amount'));
 					$txid = arraySafeVal($tx,'txid');
 					$totalsent += $amount + (float) abs(arraySafeVal($tx,'fee'));
@@ -197,9 +198,9 @@ class PayoutCommand extends CConsoleCommand
 						$nbCreated += $payout->save();
 						$user = getdbo('db_accounts', $uid);
 						if ($user) {
-							$user->balance = floatval($user->balance) - $amount;
+							yaamp_add_account_coin_balance($user->id, $coin->id, -$amount);
+							yaamp_refresh_account_summary_balance($user);
 							dborun("UPDATE balanceuser SET balance = (balance - $amount) WHERE userid=$uid AND time>=$time");
-							$user->save();
 						}
 						$match = true;
 						$time = strftime('%F %c', $time);
@@ -250,7 +251,8 @@ class PayoutCommand extends CConsoleCommand
 			"INNER JOIN coins C ON P.idcoin=C.id ".
 			"INNER JOIN accounts A ON P.account_id = A.id ".
 			"INNER JOIN coins C2 ON A.coinid = C2.id ".
-			"WHERE P.time>$since AND A.coinid != P.idcoin"
+			"LEFT JOIN account_addresses AA ON AA.account_id = A.id AND AA.coinid = P.idcoin ".
+			"WHERE P.time>$since AND A.coinid != P.idcoin AND AA.id IS NULL"
 		);
 		if (!empty($data)) {
 			echo "user payouts to check:\n";
@@ -264,7 +266,8 @@ class PayoutCommand extends CConsoleCommand
 		$data = dbolist("SELECT DISTINCT C.symbol, C.algo, A.username FROM earnings E ".
 			"INNER JOIN accounts A ON E.userid = A.id ".
 			"INNER JOIN coins C ON E.coinid = C.id ".
-			"WHERE E.create_time>$since AND E.status < 0"
+			"LEFT JOIN account_addresses AA ON AA.account_id = A.id AND AA.coinid = E.coinid ".
+			"WHERE E.create_time>$since AND E.status < 0 AND AA.id IS NULL"
 		);
 		if (!empty($data)) {
 			echo "user earnings to check:\n";
@@ -300,9 +303,11 @@ class PayoutCommand extends CConsoleCommand
 		$dests = array(); $total = 0.;
 		foreach ($payouts as $payout) {
 			$user = getdbo('db_accounts', $payout->account_id);
-			if (!$user || $user->coinid != $coin->id) continue;
+			if (!$user) continue;
 			if (doubleval($payout->amount) < $relayfee) continue; // dust if < relayfee
-			$dests[$user->username] = doubleval($payout->amount);
+			$address = yaamp_get_account_address($user, $coin->id);
+			if (empty($address)) continue;
+			$dests[$address] = doubleval($payout->amount);
 			$total += doubleval($payout->amount);
 		}
 

@@ -9,6 +9,49 @@
 		return ret; \
 	}
 
+static bool client_coin_list_contains(YAAMP_CLIENT *client, YAAMP_COIND *coind)
+{
+	return
+		(std::find(client->coins_mining_list.begin(), client->coins_mining_list.end(), coind->symbol) != client->coins_mining_list.end()) ||
+		(std::find(client->coins_mining_list.begin(), client->coins_mining_list.end(), coind->symbol2) != client->coins_mining_list.end());
+}
+
+static bool client_coin_list_ignores(YAAMP_CLIENT *client, YAAMP_COIND *coind)
+{
+	return
+		(std::find(client->coins_ignore_list.begin(), client->coins_ignore_list.end(), coind->symbol) != client->coins_ignore_list.end()) ||
+		(std::find(client->coins_ignore_list.begin(), client->coins_ignore_list.end(), coind->symbol2) != client->coins_ignore_list.end());
+}
+
+static bool client_has_coin_address(YAAMP_CLIENT *client, YAAMP_COIND *coind)
+{
+	if (client->coinid == coind->id)
+		return true;
+
+	if (client->coin_address_map.find(coind->symbol) != client->coin_address_map.end())
+		return true;
+
+	if (strlen(coind->symbol2) && client->coin_address_map.find(coind->symbol2) != client->coin_address_map.end())
+		return true;
+
+	return false;
+}
+
+static bool client_allows_coin(YAAMP_CLIENT *client, YAAMP_COIND *coind)
+{
+	bool specific_mining = (client->coins_mining_list.size() > 0);
+	if (client_coin_list_ignores(client, coind))
+		return false;
+
+	if (!client_has_coin_address(client, coind))
+		return false;
+
+	if (specific_mining && !client_coin_list_contains(client, coind))
+		return false;
+
+	return true;
+}
+
 static bool job_assign_client(YAAMP_JOB *job, YAAMP_CLIENT *client, double maxhash)
 {
 	RETURN_ON_CONDITION(client->deleted, true);
@@ -19,19 +62,9 @@ static bool job_assign_client(YAAMP_JOB *job, YAAMP_CLIENT *client, double maxha
 	RETURN_ON_CONDITION(maxhash > 0 && job->speed + client->speed > maxhash, true);
 
 	bool specific_mining = (client->coins_mining_list.size() > 0 );
-	bool coin_to_mine = client->coinid == job->coind->id ||
-						(std::find(client->coins_mining_list.begin(), client->coins_mining_list.end(), job->coind->symbol) != client->coins_mining_list.end()) ||
-						(std::find(client->coins_mining_list.begin(), client->coins_mining_list.end(), job->coind->symbol2) != client->coins_mining_list.end());
-	bool coin_to_ignore = (std::find(client->coins_ignore_list.begin(), client->coins_ignore_list.end(), job->coind->symbol) != client->coins_ignore_list.end()) ||
-						  (std::find(client->coins_ignore_list.begin(), client->coins_ignore_list.end(), job->coind->symbol2) != client->coins_ignore_list.end());
+	bool coin_to_mine = client_allows_coin(client, job->coind);
 
-	if(!g_autoexchange && maxhash >= 0. && client->coinid != job->coind->id) {
-		//debuglog("prevent client %c on %s, not the right coin\n",
-		//	client->username[0], job->coind->symbol);
-		return true;
-	}
-
-	if (coin_to_ignore) {
+	if(!g_autoexchange && maxhash >= 0. && !coin_to_mine) {
 		return true;
 	}
 
@@ -225,23 +258,15 @@ void job_assign_clients_left(double factor)
 		for(CLI li = g_list_client.first; li; li = li->next)
 		{
 			YAAMP_CLIENT *client = (YAAMP_CLIENT *)li->data;
-			bool coin_to_mine = client->coinid == coind->id ||
-								(std::find(client->coins_mining_list.begin(), client->coins_mining_list.end(), coind->symbol) != client->coins_mining_list.end()) ||
-								(std::find(client->coins_mining_list.begin(), client->coins_mining_list.end(), coind->symbol2) != client->coins_mining_list.end());
-			bool coin_to_ignore = (std::find(client->coins_ignore_list.begin(), client->coins_ignore_list.end(), coind->symbol) != client->coins_ignore_list.end()) ||
-								  (std::find(client->coins_ignore_list.begin(), client->coins_ignore_list.end(), coind->symbol2) != client->coins_ignore_list.end());
+			bool coin_to_mine = client_allows_coin(client, coind);
 
 			if (!g_autoexchange) {
-				if (client->coinid == coind->id)
+				if (coin_to_mine)
 					factor = 100.;
 				else
 					factor = 0.;
 			}
 			else if ((!(coind->auto_exchange)) && (!coin_to_mine)) {
-				factor = 0.;
-			}
-
-			if (coin_to_ignore) {
 				factor = 0.;
 			}
 

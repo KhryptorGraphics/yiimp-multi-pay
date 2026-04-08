@@ -64,6 +64,8 @@ function BackendBlockNew($coin, $db_block)
 			if(!$user) continue;
 
 			$ucoin = getdbo('db_coins', $user->coinid);
+			$native_payout = yaamp_user_has_coin_address($user, $coin->id);
+			$exchange_credit = YAAMP_ALLOW_EXCHANGE && $ucoin && $ucoin->auto_exchange && $coin->auto_exchange;
 
 			$amount = $reward * $hash_power / $total_hash_power;
 		
@@ -74,8 +76,7 @@ function BackendBlockNew($coin, $db_block)
 				if ($amount <= 0) continue;
 			}
 
-			if (!YAAMP_ALLOW_EXCHANGE || $ucoin->id == $coin->id ||
-				($ucoin->auto_exchange && $coin->auto_exchange)) {
+			if ($native_payout || $exchange_credit) {
 
 				$earning = new db_earnings;
 				$earning->userid = $user->id;
@@ -92,16 +93,11 @@ function BackendBlockNew($coin, $db_block)
 				}
 				else	// immature
 					$earning->status = 0;
-			
-				if ($ucoin) {
-					if(!YAAMP_ALLOW_EXCHANGE && $ucoin->algo != $coin->algo) {
-						debuglog($coin->symbol.": invalid earning for {$user->username}, user coin is {$ucoin->symbol}");
-						$earning->status = -1;
-					}
-				}
 		
 				if (!$earning->save())
 					debuglog(__FUNCTION__.": Unable to insert earning!");
+			} else {
+				debuglog($coin->symbol.": skipping earning for {$user->username}, no native payout address configured");
 			}
 
 			$user->last_earning = time();
@@ -128,11 +124,12 @@ function BackendBlockNew($coin, $db_block)
 		if(!$user) return;
 
 		$ucoin = getdbo('db_coins', $user->coinid);
+		$native_payout = yaamp_user_has_coin_address($user, $coin->id);
+		$exchange_credit = YAAMP_ALLOW_EXCHANGE && $ucoin && $ucoin->auto_exchange && $coin->auto_exchange;
 
 		if(!$user->no_fees) $amount = take_yaamp_fee($amount, $coin->algo, YAAMP_FEES_SOLO);
 
-		if (!YAAMP_ALLOW_EXCHANGE || $ucoin->id == $coin->id ||
-			($ucoin->auto_exchange && $coin->auto_exchange)) {
+		if ($native_payout || $exchange_credit) {
 
 			$earning = new db_earnings;
 			$earning->userid = $user->id;
@@ -149,16 +146,11 @@ function BackendBlockNew($coin, $db_block)
 			}
 			else	// immature
 				$earning->status = 0;
-		
-			if ($ucoin) {
-				if(!YAAMP_ALLOW_EXCHANGE && $ucoin->algo != $coin->algo) {
-					debuglog($coin->symbol.": invalid earning for {$user->username}, user coin is {$ucoin->symbol}");
-					$earning->status = -1;
-				}
-			}
 			
 			if (!$earning->save())
 				debuglog(__FUNCTION__.": Unable to insert earning!");
+		} else {
+			debuglog($coin->symbol.": skipping solo earning for {$user->username}, no native payout address configured");
 		}
 
 		$user->last_earning = time();
@@ -552,7 +544,7 @@ function BackendUpdatePoolBalances($coinid = NULL)
 	foreach($coins as $coin)
 	{
 		$coin->immature = (double) dboscalar("SELECT SUM(amount) FROM blocks WHERE category='immature' AND coin_id=".intval($coin->id));
-		$coin->cleared = (double) dboscalar("SELECT SUM(balance) FROM accounts WHERE coinid=".intval($coin->id));
+		$coin->cleared = (double) dboscalar("SELECT SUM(balance) FROM account_balances WHERE coinid=".intval($coin->id));
 		$pending = (double) dboscalar("SELECT SUM(amount) FROM earnings WHERE status=1 AND coinid=".intval($coin->id)); // (to be cleared)
 		$coin->available = (double) $coin->balance - $coin->cleared - $pending;
 		//if ($pending) debuglog("{$coin->symbol} immature {$coin->immature}, cleared {$coin->cleared}, pending {$pending}, available {$coin->available}");

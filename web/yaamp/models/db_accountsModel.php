@@ -33,6 +33,7 @@ class db_accounts extends CActiveRecord
 	public function deleteWithDeps()
 	{
 		$user = $this;
+		dborun("DELETE FROM account_balances WHERE account_id=".$user->id);
 		dborun("DELETE FROM balanceuser WHERE userid=".$user->id);
 		dborun("DELETE FROM hashuser WHERE userid=".$user->id);
 		dborun("DELETE FROM shares WHERE userid=".$user->id);

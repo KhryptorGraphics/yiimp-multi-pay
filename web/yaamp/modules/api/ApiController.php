@@ -286,17 +286,33 @@ class ApiController extends CommonController
             return;
 
         $total_unsold = (double) yaamp_convert_earnings_user($user, "status!=2");
+        $coin_rows = yaamp_get_user_coin_breakdown($user, time() - 24 * 60 * 60);
 
         $t          = time() - 24 * 60 * 60;
-        $total_paid = (double) controller()->memcache->get_database_scalar("api_wallet_paid-" . $user->id, "SELECT SUM(amount) FROM payouts WHERE time >= $t AND account_id=" . $user->id);
+        $total_paid = (double) yaamp_convert_payouts_user($user, "time >= $t");
 
-        $balance      = (double) $user->balance;
+        $balance      = (double) yaamp_user_balance_summary($user);
         $total_unpaid = $balance + $total_unsold;
         $total_earned = $total_unpaid + $total_paid;
 
-        $coin = getdbo('db_coins', $user->coinid);
+        $coin = yaamp_user_refcoin($user);
         if (!$coin)
             return;
+
+        $currencies = array();
+        foreach ($coin_rows as $row) {
+            $crow = $row['coin'];
+            if (!$crow) continue;
+            $currencies[$crow->symbol] = array(
+                'address' => (string) arraySafeVal($row, 'address', ''),
+                'immature' => round((double) $row['immature'], 8),
+                'confirmed' => round((double) $row['confirmed'], 8),
+                'balance' => round((double) $row['balance'], 8),
+                'paid24h' => round((double) $row['paid'], 8),
+                'unpaid' => round((double) $row['total_unpaid'], 8),
+                'value' => round((double) $row['value'], 8),
+            );
+        }
 
         header('Content-Type: application/json');
         echo json_encode(array(
@@ -306,6 +322,7 @@ class ApiController extends CommonController
             'unpaid' => round($total_unpaid, 8),
             'paid24h' => round($total_paid, 8),
             'total' => round($total_earned, 8),
+            'currencies' => $currencies,
         ));
         Yii::app()->end();
     }
@@ -329,15 +346,16 @@ class ApiController extends CommonController
             return;
 
         $total_unsold = (double) yaamp_convert_earnings_user($user, "status!=2");
+        $coin_rows = yaamp_get_user_coin_breakdown($user, time() - 24 * 60 * 60);
 
         $t          = time() - 24 * 60 * 60;
-        $total_paid = (double) controller()->memcache->get_database_scalar("api_wallet_paid-" . $user->id, "SELECT SUM(amount) FROM payouts WHERE time >= $t AND account_id=" . $user->id);
+        $total_paid = (double) yaamp_convert_payouts_user($user, "time >= $t");
 
-        $balance      = (double) $user->balance;
+        $balance      = (double) yaamp_user_balance_summary($user);
         $total_unpaid = $balance + $total_unsold;
         $total_earned = $total_unpaid + $total_paid;
 
-        $coin = getdbo('db_coins', $user->coinid);
+        $coin = yaamp_user_refcoin($user);
         if (!$coin)
             return;
 
@@ -369,13 +387,32 @@ class ApiController extends CommonController
             'miners' => $miners,
         );
 
+        $currencies = array();
+        foreach ($coin_rows as $row) {
+            $crow = $row['coin'];
+            if (!$crow) continue;
+            $currencies[$crow->symbol] = array(
+                'address' => (string) arraySafeVal($row, 'address', ''),
+                'immature' => round((double) $row['immature'], 8),
+                'confirmed' => round((double) $row['confirmed'], 8),
+                'balance' => round((double) $row['balance'], 8),
+                'paid24h' => round((double) $row['paid'], 8),
+                'unpaid' => round((double) $row['total_unpaid'], 8),
+                'value' => round((double) $row['value'], 8),
+            );
+        }
+        $payload['currencies'] = $currencies;
+
         if (YAAMP_API_PAYOUTS) {
             $payouts = array();
             $list = getdbolist('db_payouts', "account_id={$user->id} AND completed>0 AND tx IS NOT NULL AND time >= " . (time() - YAAMP_API_PAYOUTS_PERIOD) . " ORDER BY time DESC");
             foreach ($list as $payout) {
+                $payout_coin = getdbo('db_coins', $payout->idcoin ? $payout->idcoin : $user->coinid);
                 $payouts[] = array(
                     'time' => (int) $payout->time,
+                    'coin' => $payout_coin ? $payout_coin->symbol : '',
                     'amount' => (string) $payout->amount,
+                    'address' => (string) yaamp_get_account_address($user, $payout_coin ? $payout_coin->id : $user->coinid),
                     'tx' => (string) $payout->tx,
                 );
             }

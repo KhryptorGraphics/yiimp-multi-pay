@@ -102,6 +102,67 @@ static YAAMP_JOB *job_get_last(int coinid)
 	return NULL;
 }
 
+static bool job_client_coin_list_contains(YAAMP_CLIENT *client, YAAMP_COIND *coind)
+{
+	return
+		(std::find(client->coins_mining_list.begin(), client->coins_mining_list.end(), coind->symbol) != client->coins_mining_list.end()) ||
+		(std::find(client->coins_mining_list.begin(), client->coins_mining_list.end(), coind->symbol2) != client->coins_mining_list.end());
+}
+
+static bool job_client_coin_list_ignores(YAAMP_CLIENT *client, YAAMP_COIND *coind)
+{
+	return
+		(std::find(client->coins_ignore_list.begin(), client->coins_ignore_list.end(), coind->symbol) != client->coins_ignore_list.end()) ||
+		(std::find(client->coins_ignore_list.begin(), client->coins_ignore_list.end(), coind->symbol2) != client->coins_ignore_list.end());
+}
+
+static bool job_client_has_coin_address(YAAMP_CLIENT *client, YAAMP_COIND *coind)
+{
+	if (client->coinid == coind->id)
+		return true;
+
+	if (client->coin_address_map.find(coind->symbol) != client->coin_address_map.end())
+		return true;
+
+	if (strlen(coind->symbol2) && client->coin_address_map.find(coind->symbol2) != client->coin_address_map.end())
+		return true;
+
+	return false;
+}
+
+static bool job_client_allows_coin(YAAMP_CLIENT *client, YAAMP_COIND *coind)
+{
+	bool specific_mining = (client->coins_mining_list.size() > 0);
+	if (job_client_coin_list_ignores(client, coind))
+		return false;
+
+	if (!job_client_has_coin_address(client, coind))
+		return false;
+
+	if (specific_mining && !job_client_coin_list_contains(client, coind))
+		return false;
+
+	return true;
+}
+
+static YAAMP_JOB *job_get_last_for_client(YAAMP_CLIENT *client)
+{
+	g_list_job.Enter();
+	for(CLI li = g_list_job.first; li; li = li->prev)
+	{
+		YAAMP_JOB *job = (YAAMP_JOB *)li->data;
+		if(!job_can_mine(job)) continue;
+		if(!job->coind) continue;
+		if(!job_client_allows_coin(client, job->coind)) continue;
+
+		g_list_job.Leave();
+		return job;
+	}
+
+	g_list_job.Leave();
+	return NULL;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void job_send_last(YAAMP_CLIENT *client)
@@ -110,11 +171,10 @@ void job_send_last(YAAMP_CLIENT *client)
 
 	if (!g_autoexchange)
 	{
-		// prefer user coin first (if available)
-		job = job_get_last(client->coinid);
+		job = job_get_last_for_client(client);
 	}
 
-	if(!job) job = job_get_last(0);
+	if(!job && g_autoexchange) job = job_get_last(0);
 
 	if(!job) return;
 
