@@ -12,6 +12,7 @@ $links = <<<end
 <a href="/admin/version">Version</a>&nbsp;
 <a href="/admin/earning">Earnings</a>&nbsp;
 <a href="/admin/payments">Payments</a>&nbsp;
+<a href="/admin/mininggroups">Mining Groups</a>&nbsp;
 <a href="/admin/monsters">Big Miners</a>&nbsp;
 end;
 	return $links;

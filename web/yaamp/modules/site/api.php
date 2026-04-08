@@ -100,7 +100,7 @@ result:
 }
 </pre>
 <p>Multi-pay note: keep one primary address in the username and add extra payout mappings in the miner password using syntax like <span style="font-family: monospace;">addr_DOGE=D...,addr_LTC=L...</span>. The wallet endpoints expose those per-coin addresses under <span style="font-family: monospace;">currencies</span>.</p>
-<p>For grouped mining setup and address readiness, use <a href="/site/mining_groups">/site/mining_groups</a> or query the mining-groups API endpoint shown below.</p>
+<p>For grouped mining setup and address readiness, use <a href="/site/mining_groups">/site/mining_groups</a> or query the mining-groups API endpoint shown below. Public group responses only include operator-curated groups plus dedicated per-coin stratums.</p>
 <?php
 if (YAAMP_API_PAYOUTS)
 	echo "Payouts of the last ".(YAAMP_API_PAYOUTS_PERIOD / 3600)." hours are displayed, please use a block explorer to see all payouts.";
@@ -120,7 +120,7 @@ result:
 		"mode": "dedicated",
 		"mode_label": "Dedicated",
 		"source": "configured",
-		"source_label": "Configured",
+		"source_label": "Operator curated",
 		"available": true,
 		"stratum": "giggahash.com:17337",
 		"username": "qntm1....worker1",

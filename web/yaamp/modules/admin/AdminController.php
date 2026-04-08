@@ -618,6 +618,292 @@ class AdminController extends CommonController {
 		return $rows;
 	}
 
+	protected function collectConfiguredMiningGroup($groupId)
+	{
+		foreach (yaamp_get_configured_mining_groups() as $group) {
+			if (intval(arraySafeVal($group, 'id')) !== intval($groupId))
+				continue;
+
+			return yaamp_normalize_mining_group($group, null);
+		}
+
+		return null;
+	}
+
+	protected function collectMiningGroupEditorState($group=null)
+	{
+		$state = array(
+			'id' => 0,
+			'slug' => '',
+			'title' => '',
+			'algo' => '',
+			'mode' => 'dedicated',
+			'description' => '',
+			'hostname' => '',
+			'port' => '',
+			'primary_coinid' => 0,
+			'active' => 1,
+			'sortorder' => 0,
+			'coins' => array(),
+		);
+
+		if (!$group)
+			return $state;
+
+		$state['id'] = intval(arraySafeVal($group, 'id', 0));
+		$state['slug'] = trim((string) arraySafeVal($group, 'slug', ''));
+		$state['title'] = trim((string) arraySafeVal($group, 'title', ''));
+		$state['algo'] = trim((string) arraySafeVal($group, 'algo', ''));
+		$state['mode'] = trim((string) arraySafeVal($group, 'mode', 'dedicated'));
+		$state['description'] = trim((string) arraySafeVal($group, 'description', ''));
+		$state['hostname'] = trim((string) arraySafeVal($group, 'hostname', ''));
+		$state['port'] = arraySafeVal($group, 'port', '');
+		$state['primary_coinid'] = intval(arraySafeVal($group, 'primary_coinid', 0));
+		$state['active'] = intval(arraySafeVal($group, 'active', 1));
+		$state['sortorder'] = intval(arraySafeVal($group, 'sortorder', 0));
+
+		foreach ((array) arraySafeVal($group, 'coins', array()) as $entry) {
+			$coin = arraySafeVal($entry, 'coin');
+			$coinid = intval(arraySafeVal($entry, 'coinid', $coin ? $coin->id : 0));
+			if (!$coin && $coinid > 0)
+				$coin = getdbo('db_coins', $coinid);
+
+			$state['coins'][] = array(
+				'coinid' => $coinid,
+				'coin' => $coin,
+				'role' => trim((string) arraySafeVal($entry, 'role', 'member')),
+				'required' => intval(arraySafeVal($entry, 'required', 1)) ? 1 : 0,
+				'position' => intval(arraySafeVal($entry, 'position', count($state['coins']))),
+			);
+		}
+
+		return $state;
+	}
+
+	protected function saveMiningGroupDefinition($groupData, $coinRows)
+	{
+		$groupId = intval(arraySafeVal($groupData, 'id', 0));
+		$slug = trim((string) arraySafeVal($groupData, 'slug', ''));
+		$title = trim((string) arraySafeVal($groupData, 'title', ''));
+		$algo = trim((string) arraySafeVal($groupData, 'algo', ''));
+		$mode = trim((string) arraySafeVal($groupData, 'mode', 'dedicated'));
+		$description = trim((string) arraySafeVal($groupData, 'description', ''));
+		$hostname = trim((string) arraySafeVal($groupData, 'hostname', ''));
+		$port = intval(arraySafeVal($groupData, 'port', 0));
+		$primaryCoinId = intval(arraySafeVal($groupData, 'primary_coinid', 0));
+		$active = intval(arraySafeVal($groupData, 'active', 0)) ? 1 : 0;
+		$sortorder = intval(arraySafeVal($groupData, 'sortorder', 0));
+
+		$errors = array();
+		if ($slug === '')
+			$errors[] = 'Slug is required.';
+		if ($title === '')
+			$errors[] = 'Title is required.';
+		if ($algo === '')
+			$errors[] = 'Algo is required.';
+		if (!in_array($mode, array('merge', 'dedicated', 'switch')))
+			$errors[] = 'Invalid mining mode.';
+
+		$slugOwner = dboscalar(
+			"SELECT id FROM mining_groups WHERE slug=:slug",
+			array(':slug' => $slug)
+		);
+		if (!empty($slugOwner) && intval($slugOwner) !== $groupId)
+			$errors[] = 'Slug is already used by another mining group.';
+
+		$members = array();
+		$seenCoins = array();
+		foreach ((array) $coinRows as $row) {
+			$coinid = intval(arraySafeVal($row, 'coinid', 0));
+			if ($coinid <= 0)
+				continue;
+
+			if (isset($seenCoins[$coinid])) {
+				$errors[] = "Coin id {$coinid} was added more than once.";
+				continue;
+			}
+			$seenCoins[$coinid] = true;
+
+			$coin = getdbo('db_coins', $coinid);
+			if (!$coin || !$coin->installed) {
+				$errors[] = "Coin id {$coinid} is not available.";
+				continue;
+			}
+
+			$role = trim((string) arraySafeVal($row, 'role', 'member'));
+			if (!in_array($role, array('primary', 'aux', 'member')))
+				$role = 'member';
+
+			$members[] = array(
+				'coinid' => $coinid,
+				'coin' => $coin,
+				'role' => $role,
+				'required' => intval(arraySafeVal($row, 'required', 0)) ? 1 : 0,
+				'position' => intval(arraySafeVal($row, 'position', count($members))),
+			);
+		}
+
+		if (empty($members))
+			$errors[] = 'Add at least one coin to the group.';
+		if ($primaryCoinId <= 0)
+			$errors[] = 'Choose a primary coin.';
+
+		$primaryIndex = null;
+		foreach ($members as $index => $member) {
+			if (intval($member['coinid']) !== $primaryCoinId)
+				continue;
+			$primaryIndex = $index;
+			break;
+		}
+		if ($primaryCoinId > 0 && $primaryIndex === null)
+			$errors[] = 'Primary coin must also exist in the group member list.';
+
+		if ($mode === 'dedicated' && count($members) !== 1)
+			$errors[] = 'Dedicated groups must contain exactly one coin.';
+		if ($mode === 'merge' && count($members) < 2)
+			$errors[] = 'Merge groups must contain at least two coins.';
+
+		if (!empty($errors))
+			return array(false, 0, $errors);
+
+		foreach ($members as $index => $member) {
+			if ($index === $primaryIndex) {
+				$members[$index]['role'] = 'primary';
+				$members[$index]['required'] = 1;
+				continue;
+			}
+
+			if ($mode === 'merge' && $members[$index]['role'] === 'member')
+				$members[$index]['role'] = 'aux';
+			if ($mode === 'dedicated')
+				$members[$index]['role'] = 'member';
+		}
+
+		$group = $groupId ? getdbo('db_mining_groups', $groupId) : new db_mining_groups;
+		if (!$group)
+			return array(false, 0, array('Invalid mining group id.'));
+
+		$now = time();
+		$group->slug = $slug;
+		$group->title = $title;
+		$group->algo = $algo;
+		$group->mode = $mode;
+		$group->description = $description;
+		$group->hostname = $hostname !== '' ? $hostname : null;
+		$group->port = $port > 0 ? $port : null;
+		$group->primary_coinid = $primaryCoinId;
+		$group->active = $active;
+		$group->sortorder = $sortorder;
+		if (!$groupId)
+			$group->created = $now;
+		$group->updated = $now;
+
+		if (!$group->save())
+			return array(false, 0, array('Unable to save mining group metadata.'));
+
+		dborun("DELETE FROM mining_group_coins WHERE group_id=:group_id", array(':group_id' => intval($group->id)));
+		foreach ($members as $member) {
+			dborun(
+				"INSERT INTO mining_group_coins (group_id, coinid, role, required, position, created, updated)
+				VALUES (:group_id, :coinid, :role, :required, :position, :created, :updated)",
+				array(
+					':group_id' => intval($group->id),
+					':coinid' => intval($member['coinid']),
+					':role' => $member['role'],
+					':required' => intval($member['required']),
+					':position' => intval($member['position']),
+					':created' => $now,
+					':updated' => $now,
+				)
+			);
+		}
+
+		return array(true, intval($group->id), array());
+	}
+
+	public function actionMininggroups()
+	{
+		if(!$this->admin) return;
+
+		$editId = getiparam('id');
+		$prefillSlug = trim(getparam('prefill'));
+		$editingState = null;
+
+		if (isset($_POST['delete_group_id'])) {
+			$deleteId = intval($_POST['delete_group_id']);
+			$group = getdbo('db_mining_groups', $deleteId);
+			if ($group) {
+				dborun("DELETE FROM mining_group_coins WHERE group_id=:group_id", array(':group_id' => $deleteId));
+				$group->delete();
+				user()->setFlash('message', 'Mining group removed.');
+			} else {
+				user()->setFlash('error', 'Invalid mining group id.');
+			}
+			$this->redirect(array('mininggroups'));
+		}
+
+		if (isset($_POST['mining_group']) && is_array($_POST['mining_group'])) {
+			$submittedCoins = array_values((array) arraySafeVal($_POST, 'group_coin', array()));
+			list($saved, $groupId, $errors) = $this->saveMiningGroupDefinition($_POST['mining_group'], $submittedCoins);
+			if ($saved) {
+				user()->setFlash('message', 'Mining group saved.');
+				$this->redirect(array('mininggroups', 'id' => $groupId));
+			}
+
+			user()->setFlash('error', implode("<br/>", $errors));
+			$editingState = $this->collectMiningGroupEditorState(array_merge($_POST['mining_group'], array(
+				'coins' => $submittedCoins,
+			)));
+		}
+
+		if ($editingState === null && $editId > 0) {
+			$editingGroup = $this->collectConfiguredMiningGroup($editId);
+			if ($editingGroup)
+				$editingState = $this->collectMiningGroupEditorState($editingGroup);
+			else
+				user()->setFlash('error', 'Mining group not found.');
+		}
+
+		if ($editingState === null && $prefillSlug !== '') {
+			$editingGroup = yaamp_find_inferred_mining_group($prefillSlug);
+			if ($editingGroup)
+				$editingState = $this->collectMiningGroupEditorState($editingGroup);
+			else
+				user()->setFlash('error', 'Unable to load inferred mining group candidate.');
+		}
+
+		if ($editingState === null)
+			$editingState = $this->collectMiningGroupEditorState();
+
+		$configuredGroups = yaamp_get_mining_groups(null, null, array(
+			'include_configured' => true,
+			'include_inferred_merge' => false,
+			'include_inferred_dedicated' => false,
+		));
+		$configuredSlugs = array();
+		foreach ($configuredGroups as $group)
+			$configuredSlugs[arraySafeVal($group, 'slug')] = true;
+
+		$candidateGroups = array_values(array_filter(
+			yaamp_get_mining_groups(null, null, array(
+				'include_configured' => false,
+				'include_inferred_merge' => true,
+				'include_inferred_dedicated' => false,
+			)),
+			function($group) use ($configuredSlugs) {
+				return !isset($configuredSlugs[arraySafeVal($group, 'slug')]);
+			}
+		));
+
+		$coins = getdbolist('db_coins', "enable AND installed ORDER BY algo, symbol");
+		$this->render('mining_groups', array(
+			'configured_groups' => $configuredGroups,
+			'candidate_groups' => $candidateGroups,
+			'editing_group' => $editingState,
+			'coins' => $coins,
+		));
+	}
+
 	public function actionUserMultipay()
 	{
 		if(!$this->admin) return;

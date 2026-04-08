@@ -27,7 +27,7 @@ ksort($grouped);
 <div class="main-left-title">Mining Groups</div>
 <div class="main-left-inner">
 
-<p>Use this page to see which pools are dedicated and which bundles are intended for simultaneous mining. Dedicated groups have their own port. Merge groups require a payout address for every required member coin.</p>
+<p>Use this page to see operator-curated mining groups that are ready for public use. Dedicated groups have their own port. Merge groups appear here only after they have been explicitly configured, and they require a payout address for every required member coin.</p>
 
 <form method="get" action="/site/mining_groups" style="margin-bottom: 12px;">
 	<label><b>Algo</b></label>

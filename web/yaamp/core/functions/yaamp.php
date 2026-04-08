@@ -865,7 +865,7 @@ function yaamp_mining_group_source_label($source)
 {
 	switch ($source) {
 		case 'configured':
-			return 'Configured';
+			return 'Operator curated';
 		case 'inferred':
 		default:
 			return 'Derived from coin metadata';
@@ -1171,22 +1171,46 @@ function yaamp_get_inferred_mining_groups($algo=null)
 	return $groups;
 }
 
-function yaamp_get_mining_groups($algo=null, $user=null)
+function yaamp_find_inferred_mining_group($slug, $algo=null, $user=null)
 {
+	foreach (yaamp_get_inferred_mining_groups($algo) as $group) {
+		if (arraySafeVal($group, 'slug') !== $slug)
+			continue;
+
+		return yaamp_normalize_mining_group($group, $user);
+	}
+
+	return null;
+}
+
+function yaamp_get_mining_groups($algo=null, $user=null, $options=array())
+{
+	$options = array_merge(array(
+		'include_configured' => true,
+		'include_inferred_merge' => false,
+		'include_inferred_dedicated' => true,
+	), is_array($options) ? $options : array());
+
 	$normalized = array();
 	$dedicatedPrimaryCoinIds = array();
 
-	foreach (yaamp_get_configured_mining_groups($algo) as $group) {
-		$group = yaamp_normalize_mining_group($group, $user);
-		if (!$group)
-			continue;
+	if ($options['include_configured']) {
+		foreach (yaamp_get_configured_mining_groups($algo) as $group) {
+			$group = yaamp_normalize_mining_group($group, $user);
+			if (!$group)
+				continue;
 
-		$normalized[$group['slug']] = $group;
-		if ($group['mode'] === 'dedicated' && !empty($group['primary_coinid']))
-			$dedicatedPrimaryCoinIds[intval($group['primary_coinid'])] = true;
+			$normalized[$group['slug']] = $group;
+			if ($group['mode'] === 'dedicated' && !empty($group['primary_coinid']))
+				$dedicatedPrimaryCoinIds[intval($group['primary_coinid'])] = true;
+		}
 	}
 
 	foreach (yaamp_get_inferred_mining_groups($algo) as $group) {
+		if ($group['mode'] === 'merge' && !$options['include_inferred_merge'])
+			continue;
+		if ($group['mode'] === 'dedicated' && !$options['include_inferred_dedicated'])
+			continue;
 		if ($group['mode'] === 'dedicated' && !empty($group['primary_coinid']) && isset($dedicatedPrimaryCoinIds[intval($group['primary_coinid'])]))
 			continue;
 		if (isset($normalized[$group['slug']]))
