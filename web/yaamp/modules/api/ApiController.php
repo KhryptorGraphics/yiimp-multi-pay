@@ -424,6 +424,75 @@ class ApiController extends CommonController
         Yii::app()->end();
     }
 
+    public function actionMininggroups()
+    {
+        if (!LimitRequest('api-mininggroups', 10)) {
+            header('HTTP/1.1 429 Too Many Requests');
+            header('Content-Type: application/json');
+            echo json_encode(array('error' => 'rate limit exceeded'));
+            Yii::app()->end();
+        }
+        if (is_file(YAAMP_LOGS . '/overloaded')) {
+            header('HTTP/1.0 503 Disabled, server overloaded');
+            return;
+        }
+
+        $algo = trim(getparam('algo'));
+        $address = trim(getparam('address'));
+        $user = !empty($address) ? getuserparam($address) : null;
+        $groups = yaamp_get_mining_groups($algo, $user);
+
+        $payload = array();
+        foreach ($groups as $group) {
+            $coins = array();
+            foreach (arraySafeVal($group, 'coins', array()) as $entry) {
+                $coin = arraySafeVal($entry, 'coin');
+                if (!$coin) continue;
+
+                $coins[] = array(
+                    'symbol' => $coin->symbol,
+                    'name' => $coin->name,
+                    'role' => arraySafeVal($entry, 'role', 'member'),
+                    'required' => (bool) arraySafeVal($entry, 'required', 1),
+                    'auto_ready' => (bool) $coin->auto_ready,
+                );
+            }
+
+            $row = array(
+                'title' => arraySafeVal($group, 'title'),
+                'algo' => arraySafeVal($group, 'algo'),
+                'mode' => arraySafeVal($group, 'mode'),
+                'mode_label' => arraySafeVal($group, 'mode_label'),
+                'source' => arraySafeVal($group, 'source'),
+                'source_label' => arraySafeVal($group, 'source_label'),
+                'description' => arraySafeVal($group, 'description'),
+                'available' => (bool) arraySafeVal($group, 'available'),
+                'hostname' => arraySafeVal($group, 'hostname'),
+                'port' => intval(arraySafeVal($group, 'port', 0)),
+                'stratum' => arraySafeVal($group, 'stratum'),
+                'username' => arraySafeVal($group['setup'], 'username'),
+                'password' => arraySafeVal($group['setup'], 'password'),
+                'primary_coin' => ($group['primary_coin']) ? $group['primary_coin']->symbol : null,
+                'coins' => $coins,
+            );
+
+            if (!empty($address)) {
+                $state = arraySafeVal($group, 'user_state', array());
+                $row['readiness'] = array(
+                    'ready' => (bool) arraySafeVal($state, 'ready'),
+                    'configured_symbols' => array_values(arraySafeVal($state, 'configured_symbols', array())),
+                    'missing_symbols' => array_values(arraySafeVal($state, 'missing_symbols', array())),
+                );
+            }
+
+            $payload[arraySafeVal($group, 'slug')] = $row;
+        }
+
+        header('Content-Type: application/json');
+        echo json_encode($payload);
+        Yii::app()->end();
+    }
+
     /////////////////////////////////////////////////
 
     public function actionRental()

@@ -86,6 +86,7 @@ if (!function_exists('showPageHeader')) {
 		showItemHeader(controller()->id=='site' && $action=='index' && !$ad, '/', 'Home');
 		showItemHeader($action=='mining', '/site/mining', 'Pool');
 		showItemHeader(controller()->id=='site'&&($action=='index' || $action=='wallet') && $ad, "/?address=$wallet", 'Wallet');
+		showItemHeader(controller()->id=='site' && ($action=='mining_groups' || $action=='mininggroups'), '/site/mining_groups', 'Groups');
 		showItemHeader(controller()->id=='stats', '/stats', 'Graphs');
 		showItemHeader($action=='miners', '/site/miners', 'Miners');
 		showItemHeader(controller()->id=='api', '/site/api', 'API');

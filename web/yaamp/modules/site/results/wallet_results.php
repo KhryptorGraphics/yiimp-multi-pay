@@ -46,6 +46,20 @@ $multipay_password = 'c='.($refcoin ? $refcoin->symbol : 'COIN');
 if(!empty($multipay_flags))
 	$multipay_password .= ','.implode(',', $multipay_flags);
 
+$wallet_groups = array();
+if ($refcoin && !empty($refcoin->algo)) {
+	$wallet_groups = array_filter(yaamp_get_mining_groups($refcoin->algo, $user), function($group) use ($refcoin) {
+		foreach (arraySafeVal($group, 'coins', array()) as $entry) {
+			$coin = arraySafeVal($entry, 'coin');
+			if ($coin && intval($coin->id) === intval($refcoin->id))
+				return true;
+		}
+
+		$state = arraySafeVal($group, 'user_state', array());
+		return intval(arraySafeVal($state, 'configured_count', 0)) > 0;
+	});
+}
+
 echo "<table class='dataGrid2'>";
 
 echo "<thead>";
@@ -68,6 +82,20 @@ if(empty($multipay_flags))
 	echo "<br/><span style='color: #666;'>No additional payout addresses stored yet. Add them from your miner password using addr_SYMBOL=ADDRESS.</span>";
 else
 	echo "<br/><span style='color: #666;'>Configured extra payouts: ".CHtml::encode(implode(', ', $multipay_flags))."</span>";
+if (!empty($wallet_groups)) {
+	$groupLabels = array();
+	foreach ($wallet_groups as $group) {
+		$state = arraySafeVal($group, 'user_state', array());
+		if (arraySafeVal($state, 'ready')) {
+			$statusLabel = 'ready';
+		} else {
+			$missing = arraySafeVal($state, 'missing_symbols', array());
+			$statusLabel = !empty($missing) ? 'missing '.implode('/', $missing) : 'not available';
+		}
+		$groupLabels[] = arraySafeVal($group, 'title').' ['.$statusLabel.']';
+	}
+	echo "<br/><span style='color: #666;'>Group readiness: ".CHtml::encode(implode('; ', $groupLabels)).". <a href='/site/mining_groups?algo=".urlencode($refcoin->algo)."&address=".urlencode($user->username)."'>Open mining groups</a></span>";
+}
 echo "</td></tr>";
 
 $total_pending = 0;

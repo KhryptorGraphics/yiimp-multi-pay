@@ -832,6 +832,391 @@ function yaamp_convert_earnings_user($user, $status)
 	return $value;
 }
 
+function yaamp_table_exists($table)
+{
+	static $cache = array();
+
+	if (isset($cache[$table]))
+		return $cache[$table];
+
+	$exists = (bool) dboscalar(
+		"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name=:table",
+		array(':table' => $table)
+	);
+
+	$cache[$table] = $exists;
+	return $exists;
+}
+
+function yaamp_mining_mode_label($mode)
+{
+	switch ($mode) {
+		case 'merge':
+			return 'Simultaneous Merge-Mining';
+		case 'switch':
+			return 'Profit Switch';
+		case 'dedicated':
+		default:
+			return 'Dedicated';
+	}
+}
+
+function yaamp_mining_group_source_label($source)
+{
+	switch ($source) {
+		case 'configured':
+			return 'Configured';
+		case 'inferred':
+		default:
+			return 'Derived from coin metadata';
+	}
+}
+
+function yaamp_normalize_mining_group($group, $user=null)
+{
+	if (empty($group['coins']) || !is_array($group['coins']))
+		return null;
+
+	$coins = array();
+	foreach ($group['coins'] as $entry) {
+		$coin = arraySafeVal($entry, 'coin');
+		if (!$coin && !empty($entry['coinid']))
+			$coin = getdbo('db_coins', intval($entry['coinid']));
+		if (!$coin)
+			continue;
+
+		$entry['coin'] = $coin;
+		$entry['coinid'] = intval($coin->id);
+		$entry['role'] = arraySafeVal($entry, 'role', 'member');
+		$entry['required'] = (int) arraySafeVal($entry, 'required', 1);
+		$entry['position'] = (int) arraySafeVal($entry, 'position', 0);
+		$coins[] = $entry;
+	}
+
+	if (empty($coins))
+		return null;
+
+	usort($coins, function($left, $right) {
+		$position = intval(arraySafeVal($left, 'position', 0)) <=> intval(arraySafeVal($right, 'position', 0));
+		if ($position !== 0)
+			return $position;
+
+		$roleWeight = array('primary' => 0, 'aux' => 1, 'member' => 2);
+		$leftRole = arraySafeVal($roleWeight, arraySafeVal($left, 'role', 'member'), 3);
+		$rightRole = arraySafeVal($roleWeight, arraySafeVal($right, 'role', 'member'), 3);
+		if ($leftRole !== $rightRole)
+			return $leftRole <=> $rightRole;
+
+		return strcasecmp($left['coin']->symbol, $right['coin']->symbol);
+	});
+
+	$primaryCoin = null;
+	$primaryCoinId = intval(arraySafeVal($group, 'primary_coinid', 0));
+	foreach ($coins as $entry) {
+		if ($primaryCoinId > 0 && intval($entry['coinid']) === $primaryCoinId) {
+			$primaryCoin = $entry['coin'];
+			break;
+		}
+		if (!$primaryCoin && arraySafeVal($entry, 'role') === 'primary')
+			$primaryCoin = $entry['coin'];
+	}
+	if (!$primaryCoin)
+		$primaryCoin = $coins[0]['coin'];
+
+	$hostname = trim((string) arraySafeVal($group, 'hostname', ''));
+	if (empty($hostname))
+		$hostname = YAAMP_STRATUM_URL;
+
+	$port = intval(arraySafeVal($group, 'port', 0));
+	if ($port <= 0 && $primaryCoin && !empty($primaryCoin->dedicatedport))
+		$port = intval($primaryCoin->dedicatedport);
+	if ($port <= 0)
+		$port = intval(getAlgoPort(arraySafeVal($group, 'algo', $primaryCoin ? $primaryCoin->algo : null)));
+
+	$available = (bool) arraySafeVal($group, 'active', 1);
+	foreach ($coins as $entry) {
+		$coin = $entry['coin'];
+		if (!$coin->enable || !$coin->installed || !$coin->visible || !$coin->auto_ready) {
+			$available = false;
+			break;
+		}
+	}
+
+	$configured = array();
+	$missing = array();
+	$requiredCount = 0;
+	foreach ($coins as $entry) {
+		if (intval($entry['required']) !== 1)
+			continue;
+
+		$requiredCount++;
+		$coin = $entry['coin'];
+		if ($user && yaamp_user_has_coin_address($user, $coin->id))
+			$configured[] = $coin->symbol;
+		else
+			$missing[] = $coin->symbol;
+	}
+
+	$username = $primaryCoin ? $primaryCoin->symbol.'_ADDRESS.worker1' : 'PRIMARY_ADDRESS.worker1';
+	if ($user && $primaryCoin) {
+		$primaryAddress = yaamp_get_account_address($user, $primaryCoin->id);
+		if (!empty($primaryAddress))
+			$username = $primaryAddress.'.worker1';
+	}
+
+	$passwordFlags = array();
+	if ($primaryCoin)
+		$passwordFlags[] = 'c='.$primaryCoin->symbol;
+
+	foreach ($coins as $entry) {
+		$coin = $entry['coin'];
+		if ($primaryCoin && intval($coin->id) === intval($primaryCoin->id))
+			continue;
+
+		$address = $user ? yaamp_get_account_address($user, $coin->id) : null;
+		if (empty($address))
+			$address = $coin->symbol.'_ADDRESS';
+
+		$passwordFlags[] = 'addr_'.$coin->symbol.'='.$address;
+	}
+
+	$group['slug'] = arraySafeVal($group, 'slug', strtolower(arraySafeVal($group, 'algo', 'group')).'-group');
+	$group['title'] = arraySafeVal($group, 'title', ucfirst(arraySafeVal($group, 'algo', 'Mining')).' Group');
+	$group['algo'] = arraySafeVal($group, 'algo', $primaryCoin ? $primaryCoin->algo : '');
+	$group['mode'] = arraySafeVal($group, 'mode', 'dedicated');
+	$group['mode_label'] = yaamp_mining_mode_label($group['mode']);
+	$group['source'] = arraySafeVal($group, 'source', 'configured');
+	$group['source_label'] = yaamp_mining_group_source_label($group['source']);
+	$group['description'] = trim((string) arraySafeVal($group, 'description', ''));
+	$group['hostname'] = $hostname;
+	$group['port'] = $port;
+	$group['stratum'] = $hostname.':'.$port;
+	$group['primary_coinid'] = $primaryCoin ? intval($primaryCoin->id) : 0;
+	$group['primary_coin'] = $primaryCoin;
+	$group['coins'] = $coins;
+	$group['available'] = $available;
+	$group['setup'] = array(
+		'stratum' => $hostname.':'.$port,
+		'username' => $username,
+		'password' => implode(',', $passwordFlags),
+	);
+	$group['user_state'] = array(
+		'required_count' => $requiredCount,
+		'configured_count' => count($configured),
+		'configured_symbols' => $configured,
+		'missing_symbols' => $missing,
+		'ready' => $available && empty($missing),
+	);
+
+	return $group;
+}
+
+function yaamp_get_configured_mining_groups($algo=null)
+{
+	if (!yaamp_table_exists('mining_groups') || !yaamp_table_exists('mining_group_coins'))
+		return array();
+
+	$query = "active=1";
+	$params = array();
+	if (!empty($algo)) {
+		$query .= " AND algo=:algo";
+		$params[':algo'] = $algo;
+	}
+
+	$list = dbolist(
+		"SELECT * FROM mining_groups WHERE ".$query." ORDER BY algo, sortorder, title",
+		$params
+	);
+	$groups = array();
+
+	foreach ($list as $group) {
+		$rows = dbolist(
+			"SELECT coinid, role, required, position FROM mining_group_coins WHERE group_id=:group_id ORDER BY position, id",
+			array(':group_id' => intval($group['id']))
+		);
+
+		$coins = array();
+		foreach ($rows as $row) {
+			$coin = getdbo('db_coins', intval($row['coinid']));
+			if (!$coin)
+				continue;
+
+			$coins[] = array(
+				'coinid' => intval($coin->id),
+				'coin' => $coin,
+				'role' => arraySafeVal($row, 'role', 'member'),
+				'required' => intval(arraySafeVal($row, 'required', 1)),
+				'position' => intval(arraySafeVal($row, 'position', 0)),
+			);
+		}
+
+		if (empty($coins))
+			continue;
+
+		$groups[] = array(
+			'id' => intval($group['id']),
+			'slug' => $group['slug'],
+			'title' => $group['title'],
+			'algo' => $group['algo'],
+			'mode' => $group['mode'],
+			'description' => $group['description'],
+			'hostname' => $group['hostname'],
+			'port' => intval($group['port']),
+			'primary_coinid' => intval($group['primary_coinid']),
+			'active' => intval($group['active']),
+			'sortorder' => intval($group['sortorder']),
+			'source' => 'configured',
+			'coins' => $coins,
+		);
+	}
+
+	return $groups;
+}
+
+function yaamp_get_inferred_mining_groups($algo=null)
+{
+	$params = array();
+	$sql = "SELECT id FROM coins WHERE enable AND visible AND installed";
+	if (!empty($algo)) {
+		$sql .= " AND algo=:algo";
+		$params[':algo'] = $algo;
+	}
+	$sql .= " ORDER BY algo, symbol";
+
+	$coinids = dbolist($sql, $params);
+	if (empty($coinids))
+		return array();
+
+	$byAlgo = array();
+	foreach ($coinids as $row) {
+		$coin = getdbo('db_coins', intval($row['id']));
+		if (!$coin)
+			continue;
+		if (empty($coin->algo))
+			continue;
+		if (!isset($byAlgo[$coin->algo]))
+			$byAlgo[$coin->algo] = array();
+		$byAlgo[$coin->algo][] = $coin;
+	}
+
+	$groups = array();
+	foreach ($byAlgo as $algoName => $coins) {
+		$auxCoins = array();
+		$dedicatedCoins = array();
+		foreach ($coins as $coin) {
+			if (intval($coin->auxpow) === 1)
+				$auxCoins[] = $coin;
+			else if (!empty($coin->dedicatedport))
+				$dedicatedCoins[] = $coin;
+		}
+
+		if (count($auxCoins) > 1) {
+			usort($auxCoins, function($left, $right) {
+				if ($left->symbol === 'DOGE') return -1;
+				if ($right->symbol === 'DOGE') return 1;
+				return strcasecmp($left->symbol, $right->symbol);
+			});
+
+			$mergeCoins = array();
+			foreach ($auxCoins as $position => $coin) {
+				$mergeCoins[] = array(
+					'coinid' => intval($coin->id),
+					'coin' => $coin,
+					'role' => $position === 0 ? 'primary' : 'aux',
+					'required' => 1,
+					'position' => $position,
+				);
+			}
+
+			$groups[] = array(
+				'slug' => strtolower($algoName).'-merge-bundle',
+				'title' => strtoupper($algoName).' Merge Bundle',
+				'algo' => $algoName,
+				'mode' => 'merge',
+				'description' => 'Derived from current auxpow metadata. Validate the simultaneous set before advertising it as a guaranteed merge bundle.',
+				'hostname' => null,
+				'port' => 0,
+				'primary_coinid' => intval($auxCoins[0]->id),
+				'active' => 1,
+				'source' => 'inferred',
+				'coins' => $mergeCoins,
+			);
+		}
+
+		foreach ($dedicatedCoins as $coin) {
+			$groups[] = array(
+				'slug' => strtolower($algoName).'-'.strtolower($coin->symbol).'-dedicated-auto',
+				'title' => $coin->symbol.' Dedicated',
+				'algo' => $algoName,
+				'mode' => 'dedicated',
+				'description' => 'Dedicated port with native per-coin payout routing.',
+				'hostname' => null,
+				'port' => intval($coin->dedicatedport),
+				'primary_coinid' => intval($coin->id),
+				'active' => 1,
+				'source' => 'inferred',
+				'coins' => array(
+					array(
+						'coinid' => intval($coin->id),
+						'coin' => $coin,
+						'role' => 'primary',
+						'required' => 1,
+						'position' => 0,
+					),
+				),
+			);
+		}
+	}
+
+	return $groups;
+}
+
+function yaamp_get_mining_groups($algo=null, $user=null)
+{
+	$normalized = array();
+	$dedicatedPrimaryCoinIds = array();
+
+	foreach (yaamp_get_configured_mining_groups($algo) as $group) {
+		$group = yaamp_normalize_mining_group($group, $user);
+		if (!$group)
+			continue;
+
+		$normalized[$group['slug']] = $group;
+		if ($group['mode'] === 'dedicated' && !empty($group['primary_coinid']))
+			$dedicatedPrimaryCoinIds[intval($group['primary_coinid'])] = true;
+	}
+
+	foreach (yaamp_get_inferred_mining_groups($algo) as $group) {
+		if ($group['mode'] === 'dedicated' && !empty($group['primary_coinid']) && isset($dedicatedPrimaryCoinIds[intval($group['primary_coinid'])]))
+			continue;
+		if (isset($normalized[$group['slug']]))
+			continue;
+
+		$group = yaamp_normalize_mining_group($group, $user);
+		if (!$group)
+			continue;
+
+		$normalized[$group['slug']] = $group;
+	}
+
+	$groups = array_values($normalized);
+	usort($groups, function($left, $right) {
+		$algoCompare = strcasecmp(arraySafeVal($left, 'algo', ''), arraySafeVal($right, 'algo', ''));
+		if ($algoCompare !== 0)
+			return $algoCompare;
+
+		$modeOrder = array('merge' => 0, 'dedicated' => 1, 'switch' => 2);
+		$leftMode = arraySafeVal($modeOrder, arraySafeVal($left, 'mode', 'dedicated'), 9);
+		$rightMode = arraySafeVal($modeOrder, arraySafeVal($right, 'mode', 'dedicated'), 9);
+		if ($leftMode !== $rightMode)
+			return $leftMode <=> $rightMode;
+
+		return strcasecmp(arraySafeVal($left, 'title', ''), arraySafeVal($right, 'title', ''));
+	});
+
+	return $groups;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////
 
 function yaamp_pool_rate($algo=null)

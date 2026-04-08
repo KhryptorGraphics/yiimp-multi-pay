@@ -39,6 +39,7 @@ $publicHostInfo = getFullServerName();
 <li>Payouts are made automatically every <?= $payout_freq ?> for all balances above <b><?= $min_payout ?></b>, or <b><?= $min_sunday ?></b> on Sunday.</li>
 <li>For some coins, there is an initial delay before the first payout, please wait at least 6 hours before asking for support.</li>
 <li>Blocks are distributed proportionally among valid submitted shares.</li>
+<li>Use the <a href="/site/mining_groups">Mining Groups</a> page to see which coins can be mined together, which are dedicated, and which payout addresses are still missing from your session.</li>
 
 <br/>
 
@@ -199,6 +200,7 @@ if (empty($coinOptions)) {
 <li>For <b>Starshipcoin (STC)</b>, keep the wallet in the username field and use the rig name as the password. For yiimp coins like <b>SPSC</b>, the rig name is appended to the username as <span style="font-family: monospace;">wallet.worker</span>.</li>
 <li>For native multi-pay, keep one primary address in <span style="font-family: monospace;">-u</span> and append extra payout flags in the password such as <span style="font-family: monospace;">addr_DOGE=D...,addr_LTC=L...</span>.</li>
 <li>The stratum will only assign a coin to your session if that session provided a valid payout address for it.</li>
+<li>For grouped mining bundles, open <a href="/site/mining_groups">/site/mining_groups</a> and copy the bundle-specific host, username, and password flags.</li>
 <li>Payouts are made automatically every hour for all balances above <b><?=$min_payout?></b>, or <b><?=$min_sunday?></b> on Sunday.</li>
 <br>
 </ul>
@@ -213,6 +215,7 @@ if (empty($coinOptions)) {
 <ul>
 
 <li><b>API</b> - <a href='/site/api'><?= $publicHostInfo ?>/site/api</a></li>
+<li><b>Mining Groups</b> - <a href='/site/mining_groups'><?= $publicHostInfo ?>/site/mining_groups</a></li>
 <li><b>Difficulty</b> - <a href='/site/diff'><?= $publicHostInfo ?>/site/diff</a></li>
 <?php
 if (YIIMP_PUBLIC_BENCHMARK):

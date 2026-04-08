@@ -19,6 +19,11 @@ class SiteController extends CommonController
 		$this->render('api');
 	}
 
+	public function actionMining_groups()
+	{
+		$this->render('mining_groups');
+	}
+
 	public function actionWallet()
 	{
 		$this->render('wallet');

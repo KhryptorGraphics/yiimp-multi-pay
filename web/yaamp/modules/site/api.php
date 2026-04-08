@@ -100,10 +100,42 @@ result:
 }
 </pre>
 <p>Multi-pay note: keep one primary address in the username and add extra payout mappings in the miner password using syntax like <span style="font-family: monospace;">addr_DOGE=D...,addr_LTC=L...</span>. The wallet endpoints expose those per-coin addresses under <span style="font-family: monospace;">currencies</span>.</p>
+<p>For grouped mining setup and address readiness, use <a href="/site/mining_groups">/site/mining_groups</a> or query the mining-groups API endpoint shown below.</p>
 <?php
 if (YAAMP_API_PAYOUTS)
 	echo "Payouts of the last ".(YAAMP_API_PAYOUTS_PERIOD / 3600)." hours are displayed, please use a block explorer to see all payouts.";
 ?>
+<p><b>Mining Groups</b></p>
+
+request:
+<p class="main-left-box" style='padding: 3px; font-size: .8em; background-color: #ffffee; font-family: monospace;'>
+	http://<?=YAAMP_API_URL?>/api/mininggroups?algo=scrypt&amp;address=<b>WALLET_ADDRESS</b></p>
+
+result:
+<pre class="main-left-box" style='padding: 3px; font-size: .8em; background-color: #ffffee; font-family: monospace;'>
+{
+	"scrypt-qntm-dedicated": {
+		"title": "QNTM Dedicated",
+		"algo": "scrypt",
+		"mode": "dedicated",
+		"mode_label": "Dedicated",
+		"source": "configured",
+		"source_label": "Configured",
+		"available": true,
+		"stratum": "giggahash.com:17337",
+		"username": "qntm1....worker1",
+		"password": "c=QNTM",
+		"primary_coin": "QNTM",
+		"coins": ["QNTM"],
+		"readiness": {
+			"ready": true,
+			"configured_symbols": ["QNTM"],
+			"missing_symbols": []
+		}
+	}
+}
+</pre>
+
 <p><b>Pool Status</b></p>
 
 request:
