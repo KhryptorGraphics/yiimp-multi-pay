@@ -86,7 +86,7 @@ $coinOptions = array(
 		'symbol' => 'STC',
 		'algo' => 'cryptonight',
 		'port' => 36555,
-		'template' => 'xmrig -a cryptonight -o stratum+tcp://__HOST__:__PORT__ -u __WALLET__ -p __WORKER_OR_X__',
+		'template' => 'xmrig -a cryptonight -o stratum+tcp://__HOST__:__PORT__ -u __WALLET__ -p __WORKER_OR_X____EXTRAS__',
 		'supportsSolo' => 0,
 		'rigMode' => 'password',
 	),
@@ -116,9 +116,9 @@ if ($list) {
 		}
 
 		$mc_param = ($auto_exchange == 0) ? ",mc=$symbol" : "";
-		$template = "-a $algo -o stratum+tcp://__HOST__:__PORT__ -u __WALLET__.__WORKER__ -p c=$symbol".$mc_param."__SOLO__";
+		$template = "-a $algo -o stratum+tcp://__HOST__:__PORT__ -u __WALLET__.__WORKER__ -p c=$symbol".$mc_param."__SOLO____EXTRAS__";
 		if ($algo === 'spacescrypt' || $symbol === 'SPSC') {
-			$template = "spacescrypt-cpuminer -a $algo -o stratum+tcp://__HOST__:__PORT__ -u __WALLET__.__WORKER__ -p c=$symbol".$mc_param."__SOLO__";
+			$template = "spacescrypt-cpuminer -a $algo -o stratum+tcp://__HOST__:__PORT__ -u __WALLET__.__WORKER__ -p c=$symbol".$mc_param."__SOLO____EXTRAS__";
 		}
 
 		$coinOptions[] = array(
@@ -178,8 +178,13 @@ if (empty($coinOptions)) {
 			<option value=",m=solo">Solo</option>
 			</select>
 		</td>
-	
-</tbody>
+	</tr>
+	<tr>
+		<td colspan="5" style="padding-top: 8px;">
+			<label style="display: block; font-size: .85em; margin-bottom: 4px;"><b>Extra Coin Payouts (opt.)</b></label>
+			<input id="text-extra-addresses" type="text" size="90" placeholder="addr_DOGE=D...,addr_LTC=L...,addr_FLO=F..." style="width: 100%; border-style:solid; padding: 3px; font-family: monospace; border-radius: 5px;" onkeyup="generate()">
+		</td>
+	</tbody>
 <tbody>
 	<tr>
 		<td colspan="5"><p class="main-left-box" style="padding: 3px; background-color: #ffffee; font-family: monospace;" id="output">loading...</p></td>
@@ -192,6 +197,8 @@ if (empty($coinOptions)) {
 <!-- <li><b>Our stratums are now NiceHASH compatible and ASICBoost enabled, please message support if you have any issues.</b></li> -->
 <li>The coin selector includes both <b>Starshipcoin (STC)</b> on the CryptoNote sidecar pool and <b>StarShip (SPSC)</b> on the native yiimp SpaceScrypt pool.</li>
 <li>For <b>Starshipcoin (STC)</b>, keep the wallet in the username field and use the rig name as the password. For yiimp coins like <b>SPSC</b>, the rig name is appended to the username as <span style="font-family: monospace;">wallet.worker</span>.</li>
+<li>For native multi-pay, keep one primary address in <span style="font-family: monospace;">-u</span> and append extra payout flags in the password such as <span style="font-family: monospace;">addr_DOGE=D...,addr_LTC=L...</span>.</li>
+<li>The stratum will only assign a coin to your session if that session provided a valid payout address for it.</li>
 <li>Payouts are made automatically every hour for all balances above <b><?=$min_payout?></b>, or <b><?=$min_sunday?></b> on Sunday.</li>
 <br>
 </ul>
@@ -350,11 +357,40 @@ function updateGeneratorUi(option) {
     if (!supportsSolo) solo.value = '';
 }
 
+function normalizeExtraAddresses(raw) {
+    if (!raw) return '';
+
+    var tokens = raw.split(/[,\n;]+/);
+    var normalized = [];
+    for (var i = 0; i < tokens.length; i++) {
+        var token = tokens[i].trim();
+        if (!token) continue;
+
+        var parts = token.split('=');
+        if (parts.length < 2) continue;
+
+        var key = parts.shift().trim();
+        var value = parts.join('=').trim();
+        if (!value) continue;
+
+        if (key.toLowerCase().indexOf('addr_') !== 0) {
+            key = 'addr_' + key.toUpperCase();
+        } else {
+            key = 'addr_' + key.substring(5).toUpperCase();
+        }
+
+        normalized.push(key + '=' + value);
+    }
+
+    return normalized.join(',');
+}
+
 function getLastUpdated(){
     var stratum = document.getElementById('drop-stratum');
     var solo = document.getElementById('drop-solo');
     var wallet = document.getElementById('text-wallet').value.trim();
     var rigName = document.getElementById('text-rig-name').value.trim();
+    var extraAddresses = normalizeExtraAddresses(document.getElementById('text-extra-addresses').value);
     var option = getSelectedCoinOption();
     if (!option) return 'Select a coin to generate a miner command.';
 
@@ -372,7 +408,8 @@ function getLastUpdated(){
         .replace(/__WALLET__/g, wallet ? wallet : 'WALLET_ADDRESS')
         .replace(/__WORKER__/g, workerName)
         .replace(/__WORKER_OR_X__/g, workerOrX)
-        .replace(/__SOLO__/g, supportsSolo ? solo.value : '');
+        .replace(/__SOLO__/g, supportsSolo ? solo.value : '')
+        .replace(/__EXTRAS__/g, extraAddresses ? ',' + extraAddresses : '');
 }
 
 function generate(){

@@ -190,7 +190,7 @@ class SiteController extends CommonController
 		$user = getuserparam(getparam('address'));
 		if($user)
 		{
-			$balance = bitcoinvaluetoa($user->balance);
+			$balance = bitcoinvaluetoa(yaamp_user_balance_summary($user));
 			$coin = getdbo('db_coins', $user->coinid);
 
 			if($coin)

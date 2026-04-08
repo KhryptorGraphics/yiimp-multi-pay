@@ -34,6 +34,18 @@ if(!$refcoin)
 	return;
 }
 
+$multipay_flags = array();
+foreach($coin_rows as $row) {
+	$coin = arraySafeVal($row, 'coin');
+	$address = trim((string) arraySafeVal($row, 'address', ''));
+	if(!$coin || empty($address)) continue;
+	if((int) $coin->id === (int) $user->coinid && $address === $user->username) continue;
+	$multipay_flags[] = 'addr_'.$coin->symbol.'='.$address;
+}
+$multipay_password = 'c='.($refcoin ? $refcoin->symbol : 'COIN');
+if(!empty($multipay_flags))
+	$multipay_password .= ','.implode(',', $multipay_flags);
+
 echo "<table class='dataGrid2'>";
 
 echo "<thead>";
@@ -47,6 +59,16 @@ echo "<th align=right>Total</th>";
 echo "<th align=right>Value*</th>";
 echo "</tr>";
 echo "</thead>";
+echo "<tbody>";
+echo "<tr><td colspan='7' style='padding: 8px 10px; background: #f8fbff; border: 1px solid #d7e6f5;'>";
+echo "<b>Multi-pay setup</b><br/>";
+echo "Primary login address: <span style='font-family: monospace;'>".CHtml::encode($user->username)."</span><br/>";
+echo "Password flags: <span style='font-family: monospace;'>".CHtml::encode($multipay_password)."</span>";
+if(empty($multipay_flags))
+	echo "<br/><span style='color: #666;'>No additional payout addresses stored yet. Add them from your miner password using addr_SYMBOL=ADDRESS.</span>";
+else
+	echo "<br/><span style='color: #666;'>Configured extra payouts: ".CHtml::encode(implode(', ', $multipay_flags))."</span>";
+echo "</td></tr>";
 
 $total_pending = 0;
 
@@ -202,7 +224,7 @@ echo "<td align=right style='font-size: .8em;'></td>";
 echo "<td align=right style='font-size: .9em;'>$total_earned $refcoin->symbol</td>";
 echo "</tr>";
 
-echo "</table>";
+echo "</tbody></table>";
 
 echo "</div>";
 
@@ -329,7 +351,4 @@ echo "</table><br>";
 echo "</div>";
 
 echo "</div><br>";
-
-
-
 

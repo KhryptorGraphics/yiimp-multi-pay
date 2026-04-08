@@ -117,7 +117,7 @@ echo <<<END
 <div class="main-left-title">Search Wallet:</div>
 <div class="main-left-inner">
 <form action="/" method="get" style="padding: 10px;">
-<input type="text" name="address" class="main-text-input" placeholder="Wallet Address">
+<input type="text" name="address" class="main-text-input" placeholder="Wallet or configured multi-pay address">
 <input type="submit" value="Submit" class="main-submit-button" ><br><br>
 END;
 
@@ -142,7 +142,7 @@ foreach($recents as $addr)
 	echo '</td><td><a class="address" href="/?address='.$addr.'" style="font-family: monospace; font-size: 1.1em;">'.
 		$addr.'</a></td>';
 
-	$balance = bitcoinvaluetoa($user->balance); 
+	$balance = bitcoinvaluetoa(yaamp_user_balance_summary($user)); 
 
 	if($coin)
 		$balance = $balance>0? "$balance $coin->symbol": '';

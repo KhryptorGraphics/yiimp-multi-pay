@@ -338,7 +338,10 @@ function yaamp_get_account_by_address($address)
 	if (empty($address)) return null;
 
 	$user = getdbosql('db_accounts', "username=:ad", array(':ad'=>$address));
-	if ($user) return $user;
+	if ($user) {
+		yaamp_ensure_account_runtime_state($user);
+		return $user;
+	}
 
 	$account_id = dboscalar(
 		"SELECT account_id FROM account_addresses WHERE address=:ad ORDER BY account_id LIMIT 1",
@@ -346,7 +349,48 @@ function yaamp_get_account_by_address($address)
 	);
 
 	if (!$account_id) return null;
-	return getdbo('db_accounts', (int) $account_id);
+	$user = getdbo('db_accounts', (int) $account_id);
+	yaamp_ensure_account_runtime_state($user);
+	return $user;
+}
+
+function yaamp_ensure_account_runtime_state($user)
+{
+	if (!$user) return null;
+	if (!is_object($user))
+		$user = getdbo('db_accounts', intval($user));
+	if (!$user) return null;
+
+	if (!empty($user->coinid) && !empty($user->username)) {
+		$exists = dboscalar(
+			"SELECT id FROM account_addresses WHERE account_id=:uid AND coinid=:coinid LIMIT 1",
+			array(':uid'=>intval($user->id), ':coinid'=>intval($user->coinid))
+		);
+		if (!$exists) {
+			$now = time();
+			dborun(
+				"INSERT INTO account_addresses (account_id, coinid, address, created, updated) ".
+				"VALUES (:uid, :coinid, :address, :now, :now) ".
+				"ON DUPLICATE KEY UPDATE address=:address, updated=:now",
+				array(
+					':uid' => intval($user->id),
+					':coinid' => intval($user->coinid),
+					':address' => trim(substr($user->username, 0, 128)),
+					':now' => $now,
+				)
+			);
+		}
+	}
+
+	$hasBalances = dboscalar(
+		"SELECT id FROM account_balances WHERE account_id=:uid LIMIT 1",
+		array(':uid'=>intval($user->id))
+	);
+	if (!$hasBalances && !empty($user->coinid) && (double) $user->balance > 0) {
+		yaamp_set_account_coin_balance($user->id, $user->coinid, (double) $user->balance);
+	}
+
+	return $user;
 }
 
 function yaamp_user_refcoin($user)
@@ -372,6 +416,7 @@ function yaamp_get_account_address($user, $coinid)
 	if (!is_object($user))
 		$user = getdbo('db_accounts', intval($user));
 	if (!$user) return null;
+	yaamp_ensure_account_runtime_state($user);
 
 	if ((int) $user->coinid === (int) $coinid && !empty($user->username))
 		return $user->username;
@@ -441,6 +486,7 @@ function yaamp_user_balance_summary($user)
 	if (!is_object($user))
 		$user = getdbo('db_accounts', intval($user));
 	if (!$user) return 0.0;
+	yaamp_ensure_account_runtime_state($user);
 
 	$list = dbolist(
 		"SELECT coinid, balance FROM account_balances WHERE account_id=:uid AND balance > 0",
@@ -502,6 +548,7 @@ function yaamp_convert_payouts_user($user, $where='1')
 function yaamp_get_user_coin_breakdown($user, $paid_since=0)
 {
 	if (!$user) return array();
+	yaamp_ensure_account_runtime_state($user);
 
 	$breakdown = array();
 	$coinids = array();
@@ -544,6 +591,25 @@ function yaamp_get_user_coin_breakdown($user, $paid_since=0)
 			);
 		}
 		$breakdown[$coinid]['balance'] = (double) $row['balance'];
+	}
+
+	$address_rows = dbolist(
+		"SELECT coinid, address FROM account_addresses WHERE account_id=:uid",
+		array(':uid'=>$user->id)
+	);
+	foreach($address_rows as $row)
+	{
+		$coinid = (int) $row['coinid'];
+		if (!$coinid) continue;
+		$coinids[$coinid] = $coinid;
+		if (!isset($breakdown[$coinid])) {
+			$breakdown[$coinid] = array(
+				'immature' => 0.0,
+				'confirmed' => 0.0,
+				'balance' => 0.0,
+				'paid' => 0.0,
+			);
+		}
 	}
 
 	$payout_where = "account_id=:uid";
