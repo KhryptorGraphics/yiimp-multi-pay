@@ -21,44 +21,52 @@ echo "<thead>";
 echo "<tr>";
 echo "<th></th>";
 echo "<th>Time</th>";
+echo "<th>Coin</th>";
 echo "<th align=right>Amount</th>";
+echo "<th>Address</th>";
+echo "<th align=right>Value*</th>";
 echo "<th>Tx</th>";
 echo "</tr>";
 echo "</thead>";
 
-$coin = ($user->coinid == $bitcoin->id) ? $bitcoin : getdbo('db_coins', $user->coinid);
-
-$total = 0;
+$total_value = 0;
 foreach($list as $payout)
 {
 	$d = datetoa2($payout->time);
 	$amount = bitcoinvaluetoa($payout->amount);
+	$payout_coin = getdbo('db_coins', $payout->idcoin ? $payout->idcoin : $user->coinid);
+	if(!$payout_coin) continue;
+	$value = yaamp_convert_amount_user($payout_coin, (double) $payout->amount, $user);
 
 	echo "<tr class='ssrow'>";
-	echo "<td width=18></td>";
+	echo '<td width=18><img width="16" src="'.$payout_coin->image.'"></td>';
 	echo "<td><b>$d ago</b></td>";
+	echo "<td><b>{$payout_coin->symbol}</b></td>";
+	echo "<td align=right><b>$amount {$payout_coin->symbol}</b></td>";
+	echo '<td style="font-family: monospace;">'.CHtml::encode(yaamp_get_account_address($user, $payout_coin->id)).'</td>';
+	echo "<td align=right><b>".bitcoinvaluetoa($value)."</b></td>";
 
-	echo "<td align=right><b>$amount</b></td>";
-
-	$url = $coin->createExplorerLink($payout->tx, array('txid'=>$payout->tx), array('target'=>'_blank'));
+	$url = $payout_coin->createExplorerLink($payout->tx, array('txid'=>$payout->tx), array('target'=>'_blank'));
 	echo '<td style="font-family: monospace;">'.$url.'</td>';
 
 	echo "</tr>";
-	$total += $payout->amount;
+	$total_value += $value;
 }
 
-$total = bitcoinvaluetoa($total);
+$total_value = bitcoinvaluetoa($total_value);
 
 echo "<tr class='ssrow' style='border-top: 2px solid #eee;'>";
 echo "<td width=18></td>";
 echo "<td><b>Total</b></td>";
-
-echo "<td align=right><b>$total</b></td>";
+echo "<td></td>";
+echo "<td></td>";
+echo "<td></td>";
+echo "<td align=right><b>$total_value</b></td>";
 echo "<td></td>";
 
 echo "</tr>";
 
 echo "</table><br>";
 echo "</div></div><br>";
-
+echo "<p style='font-size: .85em;'>* payout values are shown in the account reference currency.</p>";
 

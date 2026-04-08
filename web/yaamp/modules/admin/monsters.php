@@ -50,9 +50,10 @@ function showUser($userid, $what)
 	if(!$user) return;
 
 	$d = datetoa2($user->last_earning);
-	$balance = bitcoinvaluetoa($user->balance);
-	$paid = dboscalar("select sum(amount) from payouts where account_id=$user->id");
-	$paid = bitcoinvaluetoa($paid);
+	$balance = bitcoinvaluetoa(yaamp_user_balance_summary($user));
+	$paid = bitcoinvaluetoa(yaamp_convert_payouts_user($user));
+	$payout_count = count(yaamp_get_account_address_rows($user));
+	$extra_payouts = max(0, $payout_count - 1);
 
 	$t = time()-24*60*60;
 
@@ -73,7 +74,10 @@ function showUser($userid, $what)
 		echo '<td width=16><img src="'.$coin->image.'" width="16"></td><td width=48><b>'.$coinlink.'</b></td>';
 	}
 
-	echo "<td><a href='/site?address=$user->username'><b>$user->username</a></b></td>";
+	$address_label = CHtml::encode($user->username);
+	if ($extra_payouts > 0)
+		$address_label .= "<br/><span style='font-size: .75em; color: #666;'>+".intval($extra_payouts)." extra payout".($extra_payouts > 1 ? 's' : '')."</span>";
+	echo "<td><a href='/?address=$user->username'><b>$address_label</a></b></td>";
 	echo "<td>$what</td>";
 	echo "<td>$d</td>";
 
@@ -109,7 +113,7 @@ $list = dbolist("select userid from shares where pid is null or pid not in (sele
 foreach($list as $item)
 	showUser($item['userid'], 'pid');
 
-$list = dbolist("select id from accounts where balance>0.001 and id not in (select distinct userid from blocks where userid is not null and time>$t)");
+$list = dbolist("select distinct account_id as id from account_balances where balance>0.001 and account_id not in (select distinct userid from blocks where userid is not null and time>$t)");
 foreach($list as $item)
 	showUser($item['id'], 'blocks');
 
@@ -131,7 +135,6 @@ foreach($list as $user)
 	showUser($user->id, 'locked');
 
 echo "</tbody></table>";
-
 
 
 

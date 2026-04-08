@@ -12,13 +12,19 @@ function BackendPayments()
 	dborun("UPDATE accounts SET balance=0 WHERE coinid=0");
 }
 
-function BackendUserCancelFailedPayment($userid)
+function BackendUserCancelFailedPayment($userid, $coinid_filter=null)
 {
 	$user = getdbo('db_accounts', intval($userid));
 	if(!$user) return false;
 
 	$amount_failed = 0.0;
-	$failed = getdbolist('db_payouts', "account_id=:uid AND IFNULL(tx,'') = ''", array(':uid'=>$user->id));
+	$params = array(':uid'=>$user->id);
+	$sql = "account_id=:uid AND IFNULL(tx,'') = ''";
+	if (!empty($coinid_filter)) {
+		$sql .= " AND idcoin=:coinid";
+		$params[':coinid'] = intval($coinid_filter);
+	}
+	$failed = getdbolist('db_payouts', $sql, $params);
 	if (empty($failed))
 		return 0.0;
 

@@ -354,6 +354,119 @@ function yaamp_get_account_by_address($address)
 	return $user;
 }
 
+function yaamp_validate_account_address_for_coin($coin, $address, &$warning=null)
+{
+	$warning = null;
+	if (!$coin) return false;
+
+	$address = trim(substr($address, 0, 128));
+	if (empty($address)) return false;
+
+	$remote = new WalletRPC($coin);
+	if (!$remote) {
+		$warning = "{$coin->symbol}: wallet RPC unavailable, address was not validated live";
+		return true;
+	}
+
+	$validation = $remote->validateaddress($address);
+	if (is_array($validation) && array_key_exists('isvalid', $validation))
+		return (bool) $validation['isvalid'];
+
+	if ($validation === false && !empty($remote->error)) {
+		$warning = "{$coin->symbol}: wallet did not confirm the address ({$remote->error})";
+		return true;
+	}
+
+	return true;
+}
+
+function yaamp_set_account_coin_address($user, $coinid, $address)
+{
+	if (!$user || !$coinid) return false;
+	if (!is_object($user))
+		$user = getdbo('db_accounts', intval($user));
+	if (!$user) return false;
+
+	$coinid = intval($coinid);
+	$address = trim(substr($address, 0, 128));
+	$now = time();
+
+	if ($coinid == intval($user->coinid)) {
+		if (empty($address)) return false;
+		if ($user->username !== $address) {
+			$user->username = $address;
+			$user->save();
+		}
+	}
+
+	if (empty($address)) {
+		dborun(
+			"DELETE FROM account_addresses WHERE account_id=:uid AND coinid=:coinid",
+			array(':uid'=>intval($user->id), ':coinid'=>$coinid)
+		);
+		return true;
+	}
+
+	dborun(
+		"INSERT INTO account_addresses (account_id, coinid, address, created, updated) ".
+		"VALUES (:uid, :coinid, :address, :now, :now) ".
+		"ON DUPLICATE KEY UPDATE address=:address, updated=:now",
+		array(
+			':uid' => intval($user->id),
+			':coinid' => $coinid,
+			':address' => $address,
+			':now' => $now,
+		)
+	);
+
+	return true;
+}
+
+function yaamp_get_account_address_rows($user)
+{
+	if (!$user) return array();
+	if (!is_object($user))
+		$user = getdbo('db_accounts', intval($user));
+	if (!$user) return array();
+
+	yaamp_ensure_account_runtime_state($user);
+
+	$rows = array();
+	$list = dbolist(
+		"SELECT coinid, address FROM account_addresses WHERE account_id=:uid ORDER BY coinid",
+		array(':uid'=>intval($user->id))
+	);
+	foreach($list as $row)
+	{
+		$coinid = intval($row['coinid']);
+		if (!$coinid) continue;
+		$coin = getdbo('db_coins', $coinid);
+		if (!$coin) continue;
+		$rows[$coinid] = array(
+			'coin' => $coin,
+			'coinid' => $coinid,
+			'address' => trim((string) $row['address']),
+		);
+	}
+
+	if (!empty($user->coinid) && !empty($user->username) && empty($rows[intval($user->coinid)])) {
+		$coin = getdbo('db_coins', intval($user->coinid));
+		if ($coin) {
+			$rows[intval($user->coinid)] = array(
+				'coin' => $coin,
+				'coinid' => intval($user->coinid),
+				'address' => trim((string) $user->username),
+			);
+		}
+	}
+
+	uasort($rows, function($a, $b) {
+		return strcasecmp($a['coin']->symbol, $b['coin']->symbol);
+	});
+
+	return $rows;
+}
+
 function yaamp_ensure_account_runtime_state($user)
 {
 	if (!$user) return null;
@@ -366,20 +479,8 @@ function yaamp_ensure_account_runtime_state($user)
 			"SELECT id FROM account_addresses WHERE account_id=:uid AND coinid=:coinid LIMIT 1",
 			array(':uid'=>intval($user->id), ':coinid'=>intval($user->coinid))
 		);
-		if (!$exists) {
-			$now = time();
-			dborun(
-				"INSERT INTO account_addresses (account_id, coinid, address, created, updated) ".
-				"VALUES (:uid, :coinid, :address, :now, :now) ".
-				"ON DUPLICATE KEY UPDATE address=:address, updated=:now",
-				array(
-					':uid' => intval($user->id),
-					':coinid' => intval($user->coinid),
-					':address' => trim(substr($user->username, 0, 128)),
-					':now' => $now,
-				)
-			);
-		}
+		if (!$exists)
+			yaamp_set_account_coin_address($user, $user->coinid, $user->username);
 	}
 
 	$hasBalances = dboscalar(
@@ -526,6 +627,35 @@ function yaamp_convert_payouts_user($user, $where='1')
 	$rows = dbolist(
 		"SELECT IFNULL(idcoin, 0) AS coinid, SUM(amount) AS amount FROM payouts ".
 		"WHERE account_id=:uid AND $where GROUP BY idcoin",
+		array(':uid'=>$user->id)
+	);
+
+	$value = 0.0;
+	foreach($rows as $row)
+	{
+		$coinid = (int) $row['coinid'];
+		if (empty($coinid))
+			$coinid = (int) $user->coinid;
+
+		$coin = getdbo('db_coins', $coinid);
+		if (!$coin) continue;
+
+		$value += yaamp_convert_amount_user($coin, (double) $row['amount'], $user);
+	}
+
+	return $value;
+}
+
+function yaamp_convert_failed_payouts_user($user, $where='1')
+{
+	if (!$user) return 0.0;
+	if (!is_object($user))
+		$user = getdbo('db_accounts', intval($user));
+	if (!$user) return 0.0;
+
+	$rows = dbolist(
+		"SELECT IFNULL(idcoin, 0) AS coinid, SUM(amount) AS amount FROM payouts ".
+		"WHERE account_id=:uid AND IFNULL(tx,'') = '' AND completed=0 AND $where GROUP BY idcoin",
 		array(':uid'=>$user->id)
 	);
 

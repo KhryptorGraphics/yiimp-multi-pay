@@ -154,7 +154,7 @@ if($refcoin->symbol == 'BTC')
 else
 	echo '<a href="/site/block?id='.$refcoin->id.'">'.$refcoin->name.'</a>';
 
-echo '<br/><span style="font-size: .8em;"">(total pending)</span></b></td>';
+echo '<br/><span style="font-size: .8em;">(total pending)</span></b></td>';
 
 echo '<td valign="top" align="right" style="font-size: .8em;">'.$unconfirmed.'</td>';
 echo '<td valign="top" align="right" style="font-size: .8em;">'.$confirmed.'</td>';
@@ -258,23 +258,27 @@ echo "<th align=right>Time</th>";
 echo "<th>Coin</th>";
 echo "<th align=right>Amount</th>";
 echo "<th>Address</th>";
+echo "<th align=right>Value*</th>";
 echo "<th>Tx</th>";
 echo "</tr>";
 echo "</thead>";
 
-$total = 0; $firstid = 999999999;
+$total_value = 0; $firstid = 999999999;
 foreach($list as $payout)
 {
 	$d = datetoa2($payout->time);
 	$payout_coin = getdbo('db_coins', $payout->idcoin ? $payout->idcoin : $user->coinid);
+	if(!$payout_coin) continue;
 	$amount = bitcoinvaluetoa($payout->amount);
 	$firstid = min($firstid, (int) $payout->id);
+	$value = yaamp_convert_amount_user($payout_coin, (double) $payout->amount, $user);
 
 	echo '<tr class="ssrow">';
 	echo '<td align="right"><b>'.$d.' ago</b></td>';
 	echo '<td><b>'.($payout_coin ? $payout_coin->symbol : '').'</b></td>';
 	echo '<td align="right"><b>'.$amount.' '.($payout_coin ? $payout_coin->symbol : '').'</b></td>';
 	echo '<td style="font-family: monospace;">'.yaamp_get_account_address($user, $payout_coin ? $payout_coin->id : $user->coinid).'</td>';
+	echo '<td align="right"><b>'.bitcoinvaluetoa($value).' '.$refcoin->symbol.'</b></td>';
 
 	$payout_tx = substr($payout->tx, 0, 36).'...';
 	$link = $payout_coin ? $payout_coin->createExplorerLink($payout_tx, array('txid'=>$payout->tx), array(), true) : $payout_tx;
@@ -282,15 +286,18 @@ foreach($list as $payout)
 	echo '<td style="font-family: monospace;">'.$link.'</td>';
 	echo '</tr>';
 
-	$total += $payout->amount;
+	$total_value += $value;
 }
 
-$amount = bitcoinvaluetoa($total);
+$amount = bitcoinvaluetoa($total_value);
 
 echo <<<end
 <tr class="ssrow">
 <td align="right">Total:</td>
-<td align="right"><b>{$amount}</b></td>
+<td></td>
+<td></td>
+<td></td>
+<td align="right"><b>{$amount} {$refcoin->symbol}</b></td>
 <td></td>
 </tr>
 end;
@@ -303,16 +310,16 @@ if (!empty($list_extra)) {
 
 	echo <<<end
 	<tr class="ssrow" style="color: darkred;">
-	<th colspan="3"><b>Extra payouts detected in the last 24H to explain negative balances (buggy Wallets)</b></th>
+	<th colspan="6"><b>Extra payouts detected in the last 24H to explain negative balances (buggy Wallets)</b></th>
 	</tr>
 	<tr class="ssrow">
-	<td colspan="3" style="font-size: .9em; padding-bottom: 8px;">
+	<td colspan="6" style="font-size: .9em; padding-bottom: 8px;">
 	Some wallets (UFO,LYB) have a problem and don't always confirm a transaction in the requested time.<br/>
 	<!-- Please be honest and continue mining to handle these extra transactions sent to you. --><br/>
 	</th>
 	</tr>
 	<tr class="ssrow">
-	<th align="right">Time</th> <th align="right">Amount</th> <th>Tx</th>
+	<th align="right">Time</th> <th align="right">Amount</th> <th align="right">Value*</th> <th>Tx</th>
 	</tr>
 end;
 
@@ -321,18 +328,22 @@ end;
 	{
 		$d = datetoa2($payout->time);
 		$amount = bitcoinvaluetoa($payout->amount);
+		$payout_coin = getdbo('db_coins', $payout->idcoin ? $payout->idcoin : $user->coinid);
+		if(!$payout_coin) continue;
+		$value = yaamp_convert_amount_user($payout_coin, (double) $payout->amount, $user);
 
 		echo '<tr class="ssrow">';
 		echo '<td align="right"><b>'.$d.' ago</b></td>';
-		echo '<td align="right"><b>'.$amount.'</b></td>';
+		echo '<td align="right"><b>'.$amount.' '.$payout_coin->symbol.'</b></td>';
+		echo '<td align="right"><b>'.bitcoinvaluetoa($value).' '.$refcoin->symbol.'</b></td>';
 
 		$payout_tx = substr($payout->tx, 0, 36).'...';
-		$link = $refcoin->createExplorerLink($payout_tx, array('txid'=>$payout->tx), array(), true);
+		$link = $payout_coin->createExplorerLink($payout_tx, array('txid'=>$payout->tx), array(), true);
 
 		echo '<td style="font-family: monospace;">'.$link.'</td>';
 		echo '</tr>';
 
-		$total += $payout->amount;
+		$total += $value;
 	}
 
 	$amount = bitcoinvaluetoa($total);
@@ -340,7 +351,8 @@ end;
 	echo <<<end
 	<tr class="ssrow" style="color: darkred;">
 	<td align="right">Total:</td>
-	<td align="right"><b>{$amount}</b></td>
+	<td></td>
+	<td align="right"><b>{$amount} {$refcoin->symbol}</b></td>
 	<td></td>
 	</tr>
 end;
@@ -351,4 +363,3 @@ echo "</table><br>";
 echo "</div>";
 
 echo "</div><br>";
-

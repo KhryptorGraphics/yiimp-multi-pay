@@ -18,6 +18,7 @@ table.totals tr.red td { color: darkred; }
 end;
 
 $coin_id = getiparam('id');
+$coin_filter = $coin_id ? getdbo('db_coins', $coin_id) : null;
 
 $saveSort = $coin_id ? 'false' : 'true';
 
@@ -63,22 +64,36 @@ if (!empty($data)) foreach ($data as $row) {
 	$immature[$immkey] = $row['immature'];
 }
 
-$data = dbolist("SELECT account_id, SUM(amount) AS failed FROM payouts WHERE tx IS NULL AND completed=0 GROUP BY account_id");
+$failedFilter = $coin_id ? "AND idcoin={$coin_id}" : "";
+$data = dbolist("SELECT account_id, IFNULL(idcoin, 0) AS coinid, SUM(amount) AS failed FROM payouts WHERE tx IS NULL AND completed=0 $failedFilter GROUP BY account_id, idcoin");
 $failed = array();
 if (!empty($data)) foreach ($data as $row) {
-	$uid = $row['account_id'];
-	$failed[$uid] = $row['failed'];
+	$key = $row['account_id'].'-'.intval($row['coinid']);
+	$failed[$key] = (double) $row['failed'];
 }
 
-$list = getdbolist('db_accounts', "is_locked != 1 $sqlFilter AND (".
-	"balance > 0 OR last_earning > (UNIX_TIMESTAMP()-60*60) OR id IN (SELECT DISTINCT account_id FROM payouts WHERE tx IS NULL)".
-	") ORDER BY last_earning DESC $limit");
+if ($coin_id) {
+	$list = getdbolist('db_accounts', "is_locked != 1 AND (".
+		"id IN (SELECT DISTINCT account_id FROM account_balances WHERE coinid={$coin_id} AND balance > 0) ".
+		"OR id IN (SELECT DISTINCT userid FROM earnings WHERE status=0 AND coinid={$coin_id}) ".
+		"OR id IN (SELECT DISTINCT account_id FROM payouts WHERE tx IS NULL AND completed=0 AND idcoin={$coin_id})".
+		") ORDER BY last_earning DESC $limit");
+} else {
+	$list = getdbolist('db_accounts', "is_locked != 1 AND (".
+		"id IN (SELECT DISTINCT account_id FROM account_balances WHERE balance > 0) ".
+		"OR id IN (SELECT DISTINCT userid FROM earnings WHERE status=0) ".
+		"OR id IN (SELECT DISTINCT account_id FROM payouts WHERE tx IS NULL AND completed=0)".
+		") ORDER BY last_earning DESC $limit");
+}
 
 $total = 0.; $totalimmat = 0.; $totalfailed = 0.;
 foreach($list as $user)
 {
-	$coin = getdbo('db_coins', $user->coinid);
+	$coin = $coin_filter ? $coin_filter : getdbo('db_coins', $user->coinid);
 	$d = datetoa2($user->last_earning);
+	$address_rows = yaamp_get_account_address_rows($user);
+	$address_count = count($address_rows);
+	$extra_payouts = max(0, $address_count - 1);
 
 	echo '<tr class="ssrow">';
 
@@ -94,28 +109,43 @@ foreach($list as $user)
 		$immkey = "0-{$user->id}";
 	}
 
-	echo '<td><a href="/?address='.$user->username.'"><b>'.$user->username.'</b></a></td>';
+	$display_address = CHtml::encode($user->username);
+	if ($coin && yaamp_get_account_address($user, $coin->id))
+		$display_address = CHtml::encode(yaamp_get_account_address($user, $coin->id));
+	if ($extra_payouts > 0)
+		$display_address .= '<br/><span style="font-size: .75em; color: #666;">+'.intval($extra_payouts).' extra payout'.($extra_payouts > 1 ? 's' : '').'</span>';
+
+	echo '<td><a href="/?address='.$user->username.'"><b>'.$display_address.'</b></a></td>';
 	echo '<td>'.$d.'</td>';
 
 	echo '<td class="currency">'.$coinbalance.'</td>';
 
-	$balance = $user->balance ? bitcoinvaluetoa($user->balance) : '';
-	$total += (double) $user->balance;
+	$balance_value = $coin ? yaamp_get_account_coin_balance($user->id, $coin->id) : yaamp_user_balance_summary($user);
+	if (!$coin_id && $coin)
+		$balance_value = yaamp_user_balance_summary($user);
+	$balance = $balance_value ? bitcoinvaluetoa($balance_value) : '';
+	$total += (double) $balance_value;
 	echo '<td class="currency">'.$balance.'</td>';
 
 	$immbalance = arraySafeVal($immature, $immkey, 0);
+	if (!$coin_id)
+		$immbalance = yaamp_convert_earnings_user($user, "status=0");
 	$totalimmat += (double) $immbalance;
 	$immbalance = $immbalance ? bitcoinvaluetoa($immbalance) : '';
 	echo '<td class="currency">'.$immbalance.'</td>';
 
-	$failbalance = arraySafeVal($failed, $user->id, 0);
+	$failed_key = $coin ? ($user->id.'-'.$coin->id) : ($user->id.'-0');
+	$failbalance = arraySafeVal($failed, $failed_key, 0);
+	if (!$coin_id)
+		$failbalance = yaamp_convert_failed_payouts_user($user, "account_id={$user->id}");
 	$totalfailed += (double) $failbalance;
 	$failbalance = $failbalance ? bitcoinvaluetoa($failbalance) : '';
 	echo '<td class="currency red">'.$failbalance.'</td>';
 
 	echo '<td class="actions">';
 	if ($failbalance != '-')
-		echo '<a href="/admin/cancelUserPayment?id='.$user->id.'">[add to balance]</a>';
+		echo '<a href="/admin/cancelUserPayment?id='.$user->id.($coin_id ? '&coinid='.$coin_id : '').'">[add to balance]</a>';
+	echo ' <a href="/admin/usermultipay?id='.$user->id.'">[multi-pay]</a>';
 	echo '</td>';
 
 	echo "</tr>";

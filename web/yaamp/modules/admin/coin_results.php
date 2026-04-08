@@ -11,7 +11,7 @@ $ETH = ($coin->rpcencoding == 'GETH');
 
 $remote = new WalletRPC($coin);
 
-$reserved1 = dboscalar("SELECT SUM(balance) FROM accounts WHERE coinid={$coin->id}");
+$reserved1 = dboscalar("SELECT SUM(balance) FROM account_balances WHERE coinid={$coin->id}");
 $reserved1 = altcoinvaluetoa($reserved1);
 $balance   = altcoinvaluetoa($coin->balance);
 
@@ -27,7 +27,7 @@ if (!empty($coin->symbol2))
 echo "<br/>";
 if (YAAMP_ALLOW_EXCHANGE) {
     $reserved2 = bitcoinvaluetoa(dboscalar("SELECT SUM(amount*price) FROM earnings
-        WHERE status!=2 AND userid IN (SELECT id FROM accounts WHERE coinid={$coin->id})"));
+        WHERE status!=2 AND coinid={$coin->id}"));
     echo "Earnings $reserved2 BTC, ";
 }
 echo "Balance (db) $balance $symbol";

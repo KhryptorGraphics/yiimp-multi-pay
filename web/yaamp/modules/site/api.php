@@ -42,11 +42,24 @@ request:
 result:
 <pre class="main-left-box" style='padding: 3px; font-size: .8em; background-color: #ffffee; font-family: monospace;'>
 {
+	"currency": "QNTM",
 	"unsold": 0.00050362,
 	"balance": 0.00000000,
 	"unpaid": 0.00050362,
 	"paid24h": 0.00000000,
-	"total": 0.00050362
+	"total": 0.00050362,
+	"currencies": {
+		"QNTM": {
+			"address": "qntm1...",
+			"balance": 0.00000000,
+			"unpaid": 0.00050362
+		},
+		"DOGE": {
+			"address": "D...",
+			"balance": 12.50000000,
+			"unpaid": 12.50000000
+		}
+	}
 }
 </pre>
 
@@ -57,11 +70,16 @@ request:
 result:
 <pre class="main-left-box" style='padding: 3px; font-size: .8em; background-color: #ffffee; font-family: monospace;'>
 {
+	"currency": "QNTM",
 	"unsold": 0.00050362,
 	"balance": 0.00000000,
 	"unpaid": 0.00050362,
 	"paid24h": 0.00000000,
 	"total": 0.00050362,
+	"currencies": {
+		"QNTM": {"address":"qntm1...","balance":0.00000000},
+		"DOGE": {"address":"D...","balance":12.50000000}
+	},
 	"miners":[{
 		"version": "ccminer\/1.8.2",
 		"password": "d=96",
@@ -81,6 +99,7 @@ result:
 <?php endif; ?>
 }
 </pre>
+<p>Multi-pay note: keep one primary address in the username and add extra payout mappings in the miner password using syntax like <span style="font-family: monospace;">addr_DOGE=D...,addr_LTC=L...</span>. The wallet endpoints expose those per-coin addresses under <span style="font-family: monospace;">currencies</span>.</p>
 <?php
 if (YAAMP_API_PAYOUTS)
 	echo "Payouts of the last ".(YAAMP_API_PAYOUTS_PERIOD / 3600)." hours are displayed, please use a block explorer to see all payouts.";

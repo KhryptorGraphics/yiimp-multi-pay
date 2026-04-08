@@ -6,13 +6,22 @@ $symbol = getparam('symbol');
 $coin = null;
 
 if($symbol == 'all')
-	$users = getdbolist('db_accounts', "balance>.001 OR id IN (SELECT DISTINCT userid FROM workers) ORDER BY balance DESC");
+	$users = getdbolist('db_accounts',
+		"(id IN (SELECT DISTINCT account_id FROM account_balances WHERE balance>0.001) ".
+		"OR id IN (SELECT DISTINCT userid FROM workers) ".
+		"OR id IN (SELECT DISTINCT userid FROM earnings)) ORDER BY last_earning DESC");
 else
 {
 	$coin = getdbosql('db_coins', "symbol=:symbol", array(':symbol'=>$symbol));
 	if(!$coin) return;
 
-	$users = getdbolist('db_accounts', "coinid={$coin->id} AND (balance>.001 OR id IN (SELECT DISTINCT userid FROM workers)) ORDER BY balance DESC");
+	$users = getdbolist('db_accounts',
+		"id IN (".
+			"SELECT DISTINCT account_id FROM account_addresses WHERE coinid={$coin->id} ".
+			"UNION SELECT DISTINCT account_id FROM account_balances WHERE coinid={$coin->id} AND balance>0.001 ".
+			"UNION SELECT DISTINCT userid FROM earnings WHERE coinid={$coin->id} ".
+			"UNION SELECT DISTINCT userid FROM shares WHERE coinid={$coin->id}".
+		") ORDER BY last_earning DESC");
 }
 
 echo <<<end
@@ -49,6 +58,7 @@ echo <<<end
 <th data-sorter="false">&nbsp;</th>
 <th data-sorter="text">Coin</th>
 <th data-sorter="text">Address</th>
+<th data-sorter="numeric" align="right">Payouts</th>
 <th data-sorter="numeric">Last</th>
 <th data-sorter="numeric" align="right">Workers</th>
 <th data-sorter="numeric" align="right">Hashrate</th>
@@ -84,13 +94,21 @@ foreach($users as $user)
 	$block_count = getdbocount('db_blocks', "userid=".$user->id);
 	$block_diff = ($paid && $block_count) ? round(dboscalar("SELECT sum(difficulty) FROM blocks WHERE userid=".$user->id)/$paid, 3): '?';
 
-	$paid = bitcoinvaluetoa($paid);
+	$paid_value = (double) yaamp_convert_payouts_user($user);
+	$paid = bitcoinvaluetoa($paid_value);
+	$balance_value = (double) yaamp_user_balance_summary($user);
+	$balance = bitcoinvaluetoa($balance_value);
+	$payout_count = count(yaamp_get_account_address_rows($user));
+	$extra_payouts = max(0, $payout_count - 1);
+	$address_label = CHtml::encode($user->username);
+	if ($extra_payouts > 0)
+		$address_label .= '<br/><span style="font-size: .75em; color: #666;">+'.intval($extra_payouts).' extra payout'.($extra_payouts > 1 ? 's' : '').'</span>';
 
 	$user_bad = Itoa2($user_bad);
 
 	$coinimg = ''; $coinlink = '';
 	$imgopt = array('width'=>'16');
-	if ($coin && $user->coinid == $coin->id) {
+	if ($coin) {
 		$coinimg = CHtml::image($coin->image, $coin->symbol, $imgopt);
 		$coinlink = CHtml::link($coin->symbol, '/admin/coin?id='.$coin->id);
 	} else if ($user->coinid > 0) {
@@ -105,7 +123,8 @@ foreach($users as $user)
 	echo '<td width="24">'.$user->id.'</td>';
 	echo '<td width="16">'.$coinimg.'</td>';
 	echo '<td width="48"><b>'.$coinlink.'</b></td>';
-	echo '<td><a href="/?address='.$user->username.'"><b>'.$user->username.'</b></a></td>';
+	echo '<td><a href="/?address='.$user->username.'"><b>'.$address_label.'</b></a></td>';
+	echo '<td align="right">'.$payout_count.'</td>';
 	echo '<td data="'.$user->last_earning.'">'.$d.'</td>';
 	echo '<td align=right>'.$miner_count.'</td>';
 
@@ -131,20 +150,21 @@ foreach($users as $user)
 	else
 		echo '<a href="/admin/blockuser?wallet='.$user->username.'">block</a> ';
 
+	echo '<a href="/admin/usermultipay?id='.$user->id.'">multi-pay</a> ';
 	echo '<a href="/admin/banuser?id='.$user->id.'"><span class="red">BAN</span></a>';
 
 	echo '</td>';
 
 	echo '</tr>';
 
-	$total_balance += $user->balance;
-	$total_paid += $paid;
+	$total_balance += $balance_value;
+	$total_paid += $paid_value;
 }
 
 echo "</tbody>";
 
 // totals colspan
-$colspan = 7;
+$colspan = 8;
 
 $total_balance = bitcoinvaluetoa($total_balance);
 $total_paid = bitcoinvaluetoa($total_paid);

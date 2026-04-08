@@ -9,8 +9,10 @@ $symbol = getparam('symbol');
 $coins = "<option value='all'>-all-</option>";
 
 $list = getdbolist('db_coins', "enable AND (".
-	"id IN (SELECT DISTINCT coinid FROM accounts WHERE balance>0.0001) ".
-	"OR id IN (SELECT DISTINCT coinid from earnings) ) ORDER BY symbol");
+	"id IN (SELECT DISTINCT coinid FROM account_addresses) ".
+	"OR id IN (SELECT DISTINCT coinid FROM account_balances WHERE balance>0.0001) ".
+	"OR id IN (SELECT DISTINCT coinid FROM earnings) ".
+	"OR id IN (SELECT DISTINCT coinid FROM shares) ) ORDER BY symbol");
 foreach($list as $coin)
 {
 	if($coin->symbol == $symbol)

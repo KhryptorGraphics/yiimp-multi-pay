@@ -83,7 +83,10 @@ foreach($earnings as $earning)
 	echo '<tr class="ssrow">';
 	echo "<td>$coinimg</td>";
 	echo "<td><b>$coinlink</b>&nbsp;($coin->symbol_show)</td>";
-	echo '<td><b><a href="/?address='.$user->username.'">'.$user->username.'</a></b></td>';
+	$payout_address = yaamp_get_account_address($user, $coin->id);
+	if (empty($payout_address))
+		$payout_address = $user->username;
+	echo '<td><b><a href="/?address='.$user->username.'">'.CHtml::encode($payout_address).'</a></b></td>';
 	echo '<td>'.bitcoinvaluetoa($earning->amount).'</td>';
 	echo '<td>'.bitcoinvaluetoa($earning->amount * $earning->price).'</td>';
 	echo '<td>'.$block->height.'</td>';
@@ -133,7 +136,7 @@ if ($coin_id) {
 	$feepct = yaamp_fee($coin->algo);
 	$totalfees = ($total / ((100 - $feepct) / 100.)) - $total;
 
-	$cleared = dboscalar("SELECT SUM(balance) FROM accounts WHERE coinid={$coin->id}");
+	$cleared = dboscalar("SELECT SUM(balance) FROM account_balances WHERE coinid={$coin->id}");
 
 	echo '<div class="totals" align="right">';
 

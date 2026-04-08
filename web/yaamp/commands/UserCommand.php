@@ -26,6 +26,8 @@ class UserCommand extends CConsoleCommand
 			echo "YiiMP user command(s)\n";
 			echo "Usage: yiimp user delete <id|address>\n";
 			echo "       yiimp user swap <address> <symbol> - assign symbol\n";
+			echo "       yiimp user multipay-sync [all|id|address]\n";
+			echo "       yiimp user multipay-set <id|address> <symbol> <payout_address>\n";
 			echo "       yiimp user search <ip>\n";
 			echo "       yiimp user purge [days] (default 180)\n";
 			return 1;
@@ -62,6 +64,16 @@ class UserCommand extends CConsoleCommand
 			$symbol = $args[2];
 			$force = arraySafeVal($args, 3, false);
 			$this->swapUserCoin($addr, $symbol, $force);
+			return 0;
+		} else if ($args[0] == 'multipay-sync') {
+			$target = arraySafeVal($args, 1, 'all');
+			$count = $this->multipaySync($target);
+			echo "$count account(s) synchronized\n";
+			return 0;
+		} else if ($args[0] == 'multipay-set') {
+			if (!isset($args[3]))
+				die("usage: yiimp user multipay-set <id|address> <symbol> <payout_address>\n");
+			$this->multipaySet($args[1], $args[2], $args[3]);
 			return 0;
 		}
 	}
@@ -205,5 +217,53 @@ class UserCommand extends CConsoleCommand
 
 		if ($user->save())
 			echo "user coin $symbol assigned, $nbUpd invalid earnings updated, $nbConf confirmed.\n";
+	}
+
+	public function multipaySync($target='all')
+	{
+		$count = 0;
+
+		if ($target === 'all') {
+			$users = getdbolist('db_accounts', "coinid IS NOT NULL AND coinid > 0 ORDER BY id ASC");
+			foreach($users as $user) {
+				yaamp_ensure_account_runtime_state($user);
+				$count++;
+			}
+			return $count;
+		}
+
+		if (strlen($target) < 26)
+			$user = getdbo('db_accounts', intval($target));
+		else
+			$user = yaamp_get_account_by_address($target);
+
+		if (!$user) die("invalid user id or address\n");
+
+		yaamp_ensure_account_runtime_state($user);
+		return 1;
+	}
+
+	public function multipaySet($target, $symbol, $payout_address)
+	{
+		if (strlen($target) < 26)
+			$user = getdbo('db_accounts', intval($target));
+		else
+			$user = yaamp_get_account_by_address($target);
+		if (!$user) die("invalid user id or address\n");
+
+		$coin = getdbosql('db_coins', 'symbol=:sym AND installed AND enable', array(':sym'=>$symbol));
+		if (!$coin) die("invalid symbol\n");
+
+		$warning = null;
+		if (!yaamp_validate_account_address_for_coin($coin, $payout_address, $warning))
+			die("invalid payout address for {$coin->symbol}\n");
+
+		yaamp_set_account_coin_address($user, $coin->id, $payout_address);
+		yaamp_ensure_account_runtime_state($user);
+
+		if (!empty($warning))
+			echo $warning."\n";
+
+		echo "saved {$coin->symbol} payout address for account {$user->id}\n";
 	}
 }

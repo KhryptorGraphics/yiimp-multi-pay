@@ -510,7 +510,7 @@ class AdminController extends CommonController {
 		if(!$this->admin) return;
 		$user = getdbo('db_accounts', getiparam('id'));
 		if ($user) {
-			BackendUserCancelFailedPayment($user->id);
+			BackendUserCancelFailedPayment($user->id, getiparam('coinid'));
 		}
 		$this->goback();
 	}
@@ -527,11 +527,13 @@ class AdminController extends CommonController {
 				foreach ($failed as $payout) {
 					$user = getdbo('db_accounts', $payout->account_id);
 					if ($user) {
-						$user->balance += floatval($payout->amount);
-						if ($user->save()) {
-							$amount_failed += floatval($payout->amount);
-							$cnt++;
-						}
+						$coinid = (int) $payout->idcoin;
+						if (empty($coinid))
+							$coinid = (int) $coin->id;
+						yaamp_add_account_coin_balance($user->id, $coinid, (double) $payout->amount);
+						yaamp_refresh_account_summary_balance($user);
+						$amount_failed += floatval($payout->amount);
+						$cnt++;
 					}
 					$payout->delete();
 				}
@@ -543,6 +545,160 @@ class AdminController extends CommonController {
 			user()->setFlash('error', 'Invalid coin id!');
 		}
 		$this->goback();
+	}
+
+	/////////////////////////////////////////////////
+
+	protected function collectUserMultipayMappings($user)
+	{
+		$coin_rows = yaamp_get_user_coin_breakdown($user);
+		$address_rows = yaamp_get_account_address_rows($user);
+		$rows = array();
+
+		foreach($address_rows as $coinid => $row) {
+			$rows[$coinid] = array(
+				'coin' => $row['coin'],
+				'coinid' => $coinid,
+				'address' => $row['address'],
+				'immature' => 0.0,
+				'confirmed' => 0.0,
+				'balance' => 0.0,
+				'paid' => 0.0,
+				'value' => 0.0,
+				'total_unpaid' => 0.0,
+			);
+		}
+
+		foreach($coin_rows as $coinid => $row) {
+			if (!isset($rows[$coinid])) {
+				$rows[$coinid] = array(
+					'coin' => $row['coin'],
+					'coinid' => $coinid,
+					'address' => '',
+					'immature' => 0.0,
+					'confirmed' => 0.0,
+					'balance' => 0.0,
+					'paid' => 0.0,
+					'value' => 0.0,
+					'total_unpaid' => 0.0,
+				);
+			}
+
+			$rows[$coinid]['coin'] = $row['coin'];
+			$rows[$coinid]['address'] = arraySafeVal($row, 'address', $rows[$coinid]['address']);
+			$rows[$coinid]['immature'] = (double) arraySafeVal($row, 'immature', 0);
+			$rows[$coinid]['confirmed'] = (double) arraySafeVal($row, 'confirmed', 0);
+			$rows[$coinid]['balance'] = (double) arraySafeVal($row, 'balance', 0);
+			$rows[$coinid]['paid'] = (double) arraySafeVal($row, 'paid', 0);
+			$rows[$coinid]['value'] = (double) arraySafeVal($row, 'value', 0);
+			$rows[$coinid]['total_unpaid'] = (double) arraySafeVal($row, 'total_unpaid', 0);
+		}
+
+		if (!empty($user->coinid) && !isset($rows[(int) $user->coinid])) {
+			$coin = getdbo('db_coins', (int) $user->coinid);
+			if ($coin) {
+				$rows[(int) $user->coinid] = array(
+					'coin' => $coin,
+					'coinid' => (int) $user->coinid,
+					'address' => trim((string) $user->username),
+					'immature' => 0.0,
+					'confirmed' => 0.0,
+					'balance' => 0.0,
+					'paid' => 0.0,
+					'value' => 0.0,
+					'total_unpaid' => 0.0,
+				);
+			}
+		}
+
+		uasort($rows, function($a, $b) {
+			return strcasecmp($a['coin']->symbol, $b['coin']->symbol);
+		});
+
+		return $rows;
+	}
+
+	public function actionUserMultipay()
+	{
+		if(!$this->admin) return;
+
+		$user = getdbo('db_accounts', getiparam('id'));
+		if (!$user) {
+			user()->setFlash('error', 'Invalid account id');
+			$this->goback();
+		}
+
+		yaamp_ensure_account_runtime_state($user);
+
+		if (isset($_POST['mapping']) && is_array($_POST['mapping']))
+		{
+			$errors = array();
+			$warnings = array();
+			$seen = array();
+
+			foreach($_POST['mapping'] as $row)
+			{
+				$coinid = intval(arraySafeVal($row, 'coinid'));
+				$address = trim((string) arraySafeVal($row, 'address', ''));
+				if (!$coinid) continue;
+
+				if (isset($seen[$coinid])) {
+					$errors[] = "Duplicate coin mapping submitted for coin id {$coinid}";
+					continue;
+				}
+				$seen[$coinid] = true;
+
+				$coin = getdbo('db_coins', $coinid);
+				if (!$coin) {
+					$errors[] = "Unknown coin id {$coinid}";
+					continue;
+				}
+
+				if ($address === '') {
+					if ($coinid == (int) $user->coinid) {
+						$errors[] = "{$coin->symbol}: primary payout address cannot be blank";
+						continue;
+					}
+
+					$coin_balance = yaamp_get_account_coin_balance($user->id, $coinid);
+					$pending = (double) dboscalar(
+						"SELECT SUM(amount) FROM earnings WHERE userid=:uid AND coinid=:coinid AND status IN (0,1)",
+						array(':uid'=>$user->id, ':coinid'=>$coinid)
+					);
+					if ($coin_balance > 0 || $pending > 0) {
+						$errors[] = "{$coin->symbol}: cannot remove payout address while unpaid balance remains";
+						continue;
+					}
+
+					yaamp_set_account_coin_address($user, $coinid, '');
+					continue;
+				}
+
+				$warning = null;
+				if (!yaamp_validate_account_address_for_coin($coin, $address, $warning)) {
+					$errors[] = "{$coin->symbol}: invalid payout address";
+					continue;
+				}
+				if (!empty($warning))
+					$warnings[] = $warning;
+
+				yaamp_set_account_coin_address($user, $coinid, $address);
+			}
+
+			if (!empty($errors))
+				user()->setFlash('error', implode("<br/>", $errors));
+			else
+				user()->setFlash('message', 'Multi-pay mappings updated');
+
+			if (!empty($warnings))
+				user()->setFlash('warning', implode("<br/>", $warnings));
+
+			$this->redirect(array('usermultipay', 'id'=>$user->id));
+		}
+
+		$user = getdbo('db_accounts', $user->id);
+		$rows = $this->collectUserMultipayMappings($user);
+		$this->render('user_multipay', array('user'=>$user, 'rows'=>$rows));
 	}
 
 	/////////////////////////////////////////////////
@@ -771,6 +927,8 @@ class AdminController extends CommonController {
 			$user->is_locked = true;
 			$user->balance = 0;
 			$user->save();
+			dborun("UPDATE account_balances SET balance=0 WHERE account_id=:uid", array(':uid'=>$user->id));
+			yaamp_refresh_account_summary_balance($user);
 		}
 
 		$this->goback();
@@ -988,4 +1146,3 @@ class AdminController extends CommonController {
 	}
 
 }
-
