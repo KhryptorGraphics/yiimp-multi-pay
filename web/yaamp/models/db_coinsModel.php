@@ -74,6 +74,61 @@ class db_coins extends CActiveRecord
 		return $this->getOfficialSymbol();
 	}
 
+	protected function getWebRootPath()
+	{
+		return dirname(__DIR__, 2);
+	}
+
+	protected function imageAssetExists($url)
+	{
+		if (empty($url)) return false;
+		if (preg_match('#^(https?:)?//#', $url)) return true;
+		return file_exists($this->getWebRootPath().$url);
+	}
+
+	protected function getImageCandidates()
+	{
+		$candidates = array();
+		$extensions = array('png', 'webp', 'jpg', 'gif', 'svg');
+
+		if (!empty($this->image))
+			$candidates[] = $this->image;
+
+		$symbols = array();
+		foreach (array($this->symbol, $this->symbol2) as $symbol) {
+			$symbol = strtoupper(trim((string) $symbol));
+			if (!empty($symbol))
+				$symbols[] = preg_replace('/[^A-Z0-9_-]/', '', $symbol);
+		}
+
+		foreach (array_unique($symbols) as $symbol) {
+			foreach ($extensions as $extension)
+				$candidates[] = "/images/coin-{$symbol}.{$extension}";
+		}
+
+		foreach ($extensions as $extension)
+			$candidates[] = "/images/coin-{$this->id}.{$extension}";
+
+		$candidates[] = '/images/coin-generic.png';
+		return array_unique($candidates);
+	}
+
+	protected function resolveImageUrl()
+	{
+		foreach ($this->getImageCandidates() as $candidate) {
+			if ($this->imageAssetExists($candidate))
+				return $candidate;
+		}
+
+		return '/images/coin-generic.png';
+	}
+
+	public function afterFind()
+	{
+		parent::afterFind();
+		$this->image = $this->resolveImageUrl();
+	}
+
 	public function deleteDeps()
 	{
 		$coin = $this;

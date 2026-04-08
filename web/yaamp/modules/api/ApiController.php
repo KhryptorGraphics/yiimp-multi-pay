@@ -15,14 +15,17 @@ class ApiController extends CommonController
             return;
         }
         if (!$whitelisted && !LimitRequest('api-status', 10)) {
-            return;
+            header('HTTP/1.1 429 Too Many Requests');
+            header('Content-Type: application/json');
+            echo json_encode(array('error' => 'rate limit exceeded'));
+            Yii::app()->end();
         }
 
         $json = controller()->memcache->get("api_status");
 
         if (!empty($json)) {
             echo $json;
-            return;
+            Yii::app()->end();
         }
 
         $stats = array();
@@ -122,6 +125,7 @@ class ApiController extends CommonController
         echo $json;
 
         controller()->memcache->set("api_status", $json, 30, MEMCACHE_COMPRESSED);
+        Yii::app()->end();
     }
 
     public function actionCurrencies()
@@ -133,7 +137,10 @@ class ApiController extends CommonController
             return;
         }
         if (!$whitelisted && !LimitRequest('api-currencies', 10)) {
-            return;
+            header('HTTP/1.1 429 Too Many Requests');
+            header('Content-Type: application/json');
+            echo json_encode(array('error' => 'rate limit exceeded'));
+            Yii::app()->end();
         }
 
         $json = controller()->memcache->get("api_currencies");
@@ -194,16 +201,21 @@ class ApiController extends CommonController
 				$btcmhd = mbitcoinvaluetoa($btcmhd);
 				
 				//Add network hash difficulty and symbol
-				$min_ttf      = $coin->network_ttf > 0 ? min($coin->actual_ttf, $coin->network_ttf) : $coin->actual_ttf;
-				$network_hash = $coin->difficulty * 0x100000000 / ($min_ttf ? $min_ttf : 60);
+				$network_hash = yaamp_coin_nethash($coin);
 
 				$fees = yaamp_fee($coin->algo);
 				$fees_solo = yaamp_fee_solo($coin->algo);
-				$port_db = getdbosql('db_stratums', "algo=:algo and symbol=:symbol", array(':algo' => $coin->algo,':symbol' => $coin->symbol));
+				$port_db = getdbosql(
+					'db_stratums',
+					"algo=:algo and symbol=:symbol and time>:cutoff ORDER BY time DESC, started DESC",
+					array(':algo' => $coin->algo, ':symbol' => $coin->symbol, ':cutoff' => time() - 600)
+				);
 
-				if ($port_db) 
+				if ($port_db)
 					$port = $port_db->port;
-				else 
+				else if (!empty($coin->dedicatedport))
+					$port = $coin->dedicatedport;
+				else
 					$port = getAlgoPort($coin->algo);
 
 				$min_payout = max(floatval(YAAMP_PAYMENTS_MINI), floatval($coin->payout_min));
@@ -252,12 +264,16 @@ class ApiController extends CommonController
 
         header('Content-Type: application/json');
         echo str_replace("},", "},\n", $json);
+        Yii::app()->end();
     }
 
     public function actionWallet()
     {
         if (!LimitRequest('api-wallet', 10)) {
-            return;
+            header('HTTP/1.1 429 Too Many Requests');
+            header('Content-Type: application/json');
+            echo json_encode(array('error' => 'rate limit exceeded'));
+            Yii::app()->end();
         }
         if (is_file(YAAMP_LOGS . '/overloaded')) {
             header('HTTP/1.0 503 Disabled, server overloaded');
@@ -269,28 +285,29 @@ class ApiController extends CommonController
         if (!$user || $user->is_locked)
             return;
 
-        $total_unsold = yaamp_convert_earnings_user($user, "status!=2");
+        $total_unsold = (double) yaamp_convert_earnings_user($user, "status!=2");
 
         $t          = time() - 24 * 60 * 60;
-        $total_paid = bitcoinvaluetoa(controller()->memcache->get_database_scalar("api_wallet_paid-" . $user->id, "SELECT SUM(amount) FROM payouts WHERE time >= $t AND account_id=" . $user->id));
+        $total_paid = (double) controller()->memcache->get_database_scalar("api_wallet_paid-" . $user->id, "SELECT SUM(amount) FROM payouts WHERE time >= $t AND account_id=" . $user->id);
 
-        $balance      = bitcoinvaluetoa($user->balance);
-        $total_unpaid = bitcoinvaluetoa($balance + $total_unsold);
-        $total_earned = bitcoinvaluetoa($total_unpaid + $total_paid);
+        $balance      = (double) $user->balance;
+        $total_unpaid = $balance + $total_unsold;
+        $total_earned = $total_unpaid + $total_paid;
 
         $coin = getdbo('db_coins', $user->coinid);
         if (!$coin)
             return;
 
         header('Content-Type: application/json');
-        echo "{";
-        echo "\"currency\": \"{$coin->symbol}\", ";
-        echo "\"unsold\": $total_unsold, ";
-        echo "\"balance\": $balance, ";
-        echo "\"unpaid\": $total_unpaid, ";
-        echo "\"paid24h\": $total_paid, ";
-        echo "\"total\": $total_earned";
-        echo "}";
+        echo json_encode(array(
+            'currency' => $coin->symbol,
+            'unsold' => round($total_unsold, 8),
+            'balance' => round($balance, 8),
+            'unpaid' => round($total_unpaid, 8),
+            'paid24h' => round($total_paid, 8),
+            'total' => round($total_earned, 8),
+        ));
+        Yii::app()->end();
     }
 
     public function actionWalletEx()
@@ -300,84 +317,74 @@ class ApiController extends CommonController
             header('HTTP/1.0 503 Disabled, server overloaded');
             return;
         }
-        if (!LimitRequest('api-wallet', 60)) {
-            return;
+        if (!LimitRequest('api-wallet-ex', 10)) {
+            header('HTTP/1.1 429 Too Many Requests');
+            header('Content-Type: application/json');
+            echo json_encode(array('error' => 'rate limit exceeded'));
+            Yii::app()->end();
         }
 
         $user = getuserparam($wallet);
         if (!$user || $user->is_locked)
             return;
 
-        $total_unsold = yaamp_convert_earnings_user($user, "status!=2");
+        $total_unsold = (double) yaamp_convert_earnings_user($user, "status!=2");
 
         $t          = time() - 24 * 60 * 60;
-        $total_paid = bitcoinvaluetoa(controller()->memcache->get_database_scalar("api_wallet_paid-" . $user->id, "SELECT SUM(amount) FROM payouts WHERE time >= $t AND account_id=" . $user->id));
+        $total_paid = (double) controller()->memcache->get_database_scalar("api_wallet_paid-" . $user->id, "SELECT SUM(amount) FROM payouts WHERE time >= $t AND account_id=" . $user->id);
 
-        $balance      = bitcoinvaluetoa($user->balance);
-        $total_unpaid = bitcoinvaluetoa($balance + $total_unsold);
-        $total_earned = bitcoinvaluetoa($total_unpaid + $total_paid);
+        $balance      = (double) $user->balance;
+        $total_unpaid = $balance + $total_unsold;
+        $total_earned = $total_unpaid + $total_paid;
 
         $coin = getdbo('db_coins', $user->coinid);
         if (!$coin)
             return;
 
-        header('Content-Type: application/json');
-
-        echo "{";
-        echo "\"currency\": " . json_encode($coin->symbol) . ", ";
-        echo "\"unsold\": $total_unsold, ";
-        echo "\"balance\": $balance, ";
-        echo "\"unpaid\": $total_unpaid, ";
-        echo "\"paid24h\": $total_paid, ";
-        echo "\"total\": $total_earned, ";
-
-        echo "\"miners\": ";
-        echo "[";
-
+        $miners = array();
         $workers = getdbolist('db_workers', "userid={$user->id} ORDER BY password");
-        foreach ($workers as $i => $worker) {
+        foreach ($workers as $worker) {
             $user_rate1     = yaamp_worker_rate($worker->id, $worker->algo);
             $user_rate1_bad = yaamp_worker_rate_bad($worker->id, $worker->algo);
 
-            if ($i)
-                echo ", ";
-
-            echo "{";
-            echo "\"version\": " . json_encode($worker->version) . ", ";
-            echo "\"password\": " . json_encode($worker->password) . ", ";
-            echo "\"ID\": " . json_encode($worker->worker) . ", ";
-            echo "\"algo\": \"{$worker->algo}\", ";
-            echo "\"difficulty\": " . doubleval($worker->difficulty) . ", ";
-            echo "\"subscribe\": " . intval($worker->subscribe) . ", ";
-            echo "\"accepted\": " . round($user_rate1, 3) . ", ";
-            echo "\"rejected\": " . round($user_rate1_bad, 3);
-            echo "}";
+            $miners[] = array(
+                'version' => $worker->version,
+                'password' => $worker->password,
+                'ID' => $worker->worker,
+                'algo' => $worker->algo,
+                'difficulty' => (double) $worker->difficulty,
+                'subscribe' => (int) $worker->subscribe,
+                'accepted' => round((double) $user_rate1, 3),
+                'rejected' => round((double) $user_rate1_bad, 3),
+            );
         }
 
-        echo "]";
+        $payload = array(
+            'currency' => $coin->symbol,
+            'unsold' => round($total_unsold, 8),
+            'balance' => round($balance, 8),
+            'unpaid' => round($total_unpaid, 8),
+            'paid24h' => round($total_paid, 8),
+            'total' => round($total_earned, 8),
+            'miners' => $miners,
+        );
 
         if (YAAMP_API_PAYOUTS) {
-            $json_payouts = controller()->memcache->get("api_payouts-" . $user->id);
-            if (empty($json_payouts)) {
-                $json_payouts = ",\"payouts\": ";
-                $json_payouts .= "[";
-                $list = getdbolist('db_payouts', "account_id={$user->id} AND completed>0 AND tx IS NOT NULL AND time >= " . (time() - YAAMP_API_PAYOUTS_PERIOD) . " ORDER BY time DESC");
-                foreach ($list as $j => $payout) {
-                    if ($j)
-                    $json_payouts .= ", ";
-                    $json_payouts .= "{";
-                    $json_payouts .= "\"time\": " . (0 + $payout->time) . ",";
-                    $json_payouts .= "\"amount\": \"{$payout->amount}\",";
-                    $json_payouts .= "\"tx\": \"{$payout->tx}\"";
-                    $json_payouts .= "}";
-                }
-                $json_payouts .= "]";
-                controller()->memcache->set("api_payouts-" . $user->id, $json_payouts, 60, MEMCACHE_COMPRESSED);
+            $payouts = array();
+            $list = getdbolist('db_payouts', "account_id={$user->id} AND completed>0 AND tx IS NOT NULL AND time >= " . (time() - YAAMP_API_PAYOUTS_PERIOD) . " ORDER BY time DESC");
+            foreach ($list as $payout) {
+                $payouts[] = array(
+                    'time' => (int) $payout->time,
+                    'amount' => (string) $payout->amount,
+                    'tx' => (string) $payout->tx,
+                );
             }
-            echo str_replace("},", "},\n", $json_payouts);
+            $payload['payouts'] = $payouts;
         }
 
-        echo "}";
+        header('Content-Type: application/json');
+        echo json_encode($payload);
+        Yii::app()->end();
     }
 
     /////////////////////////////////////////////////

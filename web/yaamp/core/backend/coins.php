@@ -176,10 +176,17 @@ function BackendCoinsUpdate()
         } else {
             $template = $remote->getblocktemplate('{}');
         }
+		if (!$template && stripos($remote->error, 'segwit rule set') !== false) {
+			$template = $remote->getblocktemplate('{"rules":["segwit"]}');
+			if ($template) {
+				$coin->usesegwit = true;
+			}
+		}
         // Change for segwit end
 
 		if($template && isset($template['coinbasevalue']))
 		{
+			$coin->auto_ready = ($coin->connections > 0);
 			$coin->reward = $template['coinbasevalue']/100000000*$coin->reward_mul;
 
 			if(isset($template['payee_amount']) && $coin->symbol != 'LIMX') 
@@ -285,6 +292,7 @@ function BackendCoinsUpdate()
 			$template = $remote->getmemorypool();
 			if($template && isset($template['coinbasevalue']))
 			{
+				$coin->auto_ready = ($coin->connections > 0);
 				$coin->usememorypool = true;
 				$coin->reward = $template['coinbasevalue']/100000000*$coin->reward_mul;
 

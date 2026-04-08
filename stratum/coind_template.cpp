@@ -691,6 +691,7 @@ bool coind_create_job(YAAMP_COIND *coind, bool force)
 		}
 		delete templ;
 
+		g_last_broadcasted = time(NULL);
 		CommonUnlock(&coind->mutex);
 		return true;
 	}
@@ -751,6 +752,7 @@ bool coind_create_job(YAAMP_COIND *coind, bool force)
 	coind->job->remote = NULL;
 
 	g_list_job.AddTail(coind->job);
+	g_last_broadcasted = time(NULL);
 	CommonUnlock(&coind->mutex);
 
 //	debuglog("coind_create_job %s %d new job %x\n", coind->name, coind->height, coind->job->id);

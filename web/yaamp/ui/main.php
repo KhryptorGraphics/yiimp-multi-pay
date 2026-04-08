@@ -1,5 +1,10 @@
 <?php
 
+if (defined('YIIMP_LAYOUT_MAIN_RENDERED')) {
+	return;
+}
+define('YIIMP_LAYOUT_MAIN_RENDERED', true);
+
 require('misc.php');
 echo <<<END
 
@@ -55,6 +60,106 @@ echo CHtml::scriptFile('/yaamp/ui/js/jquery.tablesorter.js');
 
 echo "</head>";
 
+if (!function_exists('showItemHeader')) {
+	function showItemHeader($selected, $url, $name)
+	{
+		if($selected) $selected_text = "class='selected'";
+		else $selected_text = '';
+
+		echo "<span><a $selected_text href='$url'>$name</a></span>";
+		echo "&nbsp;";
+	}
+}
+
+if (!function_exists('showPageHeader')) {
+	function showPageHeader()
+	{
+		echo '<div class="tabmenu-out">';
+		echo '<div class="tabmenu-inner">';
+
+		echo '&nbsp;&nbsp;<a href="/">'.YAAMP_SITE_NAME.'</a>';
+
+		$action = controller()->action->id;
+		$wallet = user()->getState('yaamp-wallet');
+		$ad = isset($_GET['address']);
+
+		showItemHeader(controller()->id=='site' && $action=='index' && !$ad, '/', 'Home');
+		showItemHeader($action=='mining', '/site/mining', 'Pool');
+		showItemHeader(controller()->id=='site'&&($action=='index' || $action=='wallet') && $ad, "/?address=$wallet", 'Wallet');
+		showItemHeader(controller()->id=='stats', '/stats', 'Graphs');
+		showItemHeader($action=='miners', '/site/miners', 'Miners');
+		showItemHeader(controller()->id=='api', '/site/api', 'API');
+		if (YIIMP_PUBLIC_EXPLORER)
+			showItemHeader(controller()->id=='explorer', '/explorer', 'Explorers');
+
+		if (YIIMP_PUBLIC_BENCHMARK)
+			showItemHeader(controller()->id=='bench', '/bench', 'Benchs');
+
+		if (YAAMP_RENTAL)
+			showItemHeader(controller()->id=='renting', '/renting', 'Rental');
+
+		if (YIIMP_ADMIN_LOGIN) {
+			if(controller()->admin)
+			{
+				if (isAdminIP($_SERVER['REMOTE_ADDR']) === false)
+					debuglog("admin {$_SERVER['REMOTE_ADDR']}");
+
+				showItemHeader(controller()->id=='coin', '/coin', 'Coins');
+				showItemHeader($action=='common', '/admin/dashboard', 'Dashboard');
+				showItemHeader(controller()->id=='admin'&&$action=='coinwallets', "/admin/coinwallets", 'Wallets');
+
+				if (YAAMP_RENTAL)
+					showItemHeader(controller()->id=='renting' && $action=='admin', '/renting/admin', 'Jobs');
+
+				if (YAAMP_ALLOW_EXCHANGE)
+					showItemHeader(controller()->id=='trading', '/trading', 'Trading');
+
+				if (YAAMP_USE_NICEHASH_API)
+					showItemHeader(controller()->id=='nicehash', '/nicehash', 'Nicehash');
+
+				showItemHeader(controller()->id=='logout', '/admin/logout', 'Logout');
+			}
+			else {
+				showItemHeader(controller()->id=='login', '/admin/login', 'Login');
+			}
+		}
+
+		echo '<span style="float: right;">';
+
+		$nextpayout = '<span id="nextpayout" style="font-size: .8em;">Next Payout: temporarily unavailable</span>';
+		try {
+			$mining = getdbosql('db_mining');
+			if ($mining && isset($mining->last_payout)) {
+				$nextpayment = date('H:i T', $mining->last_payout+YAAMP_PAYMENTS_FREQ);
+				$eta = ($mining->last_payout+YAAMP_PAYMENTS_FREQ) - time();
+				$eta_mn = 'in '.round($eta / 60).' minutes';
+				$nextpayout = '<span id="nextpayout" style="font-size: .8em;" title="'.$eta_mn.'">Next Payout: '.$nextpayment.'</span>';
+			}
+		}
+		catch (CDbException $e) {
+			debuglog(__METHOD__.': unable to load next payout - '.$e->getMessage());
+		}
+
+		echo $nextpayout;
+
+		echo "</div>";
+		echo "</div>";
+	}
+}
+
+if (!function_exists('showPageFooter')) {
+	function showPageFooter()
+	{
+		echo '<div class="footer">';
+		$year = date("Y", time());
+
+		echo "<p>&copy; $year ".YAAMP_SITE_NAME.' - '.
+			'<a href="https://github.com/Kudaraidee/yiimp">Open source Project</a></p>';
+
+		echo '</div><!-- footer -->';
+	}
+}
+
 ///////////////////////////////////////////////////////////////
 
 echo '<body class="page">';
@@ -65,102 +170,3 @@ showPageContent($content);
 showPageFooter();
 
 echo "</body></html>";
-return;
-
-/////////////////////////////////////////////////////////////////////
-
-function showItemHeader($selected, $url, $name)
-{
-	if($selected) $selected_text = "class='selected'";
-	else $selected_text = '';
-
-	echo "<span><a $selected_text href='$url'>$name</a></span>";
-	echo "&nbsp;";
-}
-
-function showPageHeader()
-{
-	echo '<div class="tabmenu-out">';
-	echo '<div class="tabmenu-inner">';
-
-	echo '&nbsp;&nbsp;<a href="/">'.YAAMP_SITE_NAME.'</a>';
-
-	$action = controller()->action->id;
-	$wallet = user()->getState('yaamp-wallet');
-	$ad = isset($_GET['address']);
-
-	showItemHeader(controller()->id=='site' && $action=='index' && !$ad, '/', 'Home');
-	showItemHeader($action=='mining', '/site/mining', 'Pool');
-	showItemHeader(controller()->id=='site'&&($action=='index' || $action=='wallet') && $ad, "/?address=$wallet", 'Wallet');
-	showItemHeader(controller()->id=='stats', '/stats', 'Graphs');
-	showItemHeader($action=='miners', '/site/miners', 'Miners');
-	showItemHeader(controller()->id=='api', '/site/api', 'API');
-	if (YIIMP_PUBLIC_EXPLORER)
-		showItemHeader(controller()->id=='explorer', '/explorer', 'Explorers');
-
-	if (YIIMP_PUBLIC_BENCHMARK)
-		showItemHeader(controller()->id=='bench', '/bench', 'Benchs');
-
-	if (YAAMP_RENTAL)
-		showItemHeader(controller()->id=='renting', '/renting', 'Rental');
-
-	if (YIIMP_ADMIN_LOGIN) {
-		if(controller()->admin)
-		{
-			if (isAdminIP($_SERVER['REMOTE_ADDR']) === false)
-				debuglog("admin {$_SERVER['REMOTE_ADDR']}");
-
-			showItemHeader(controller()->id=='coin', '/coin', 'Coins');
-			showItemHeader($action=='common', '/admin/dashboard', 'Dashboard');
-			showItemHeader(controller()->id=='admin'&&$action=='coinwallets', "/admin/coinwallets", 'Wallets');
-
-			if (YAAMP_RENTAL)
-				showItemHeader(controller()->id=='renting' && $action=='admin', '/renting/admin', 'Jobs');
-
-			if (YAAMP_ALLOW_EXCHANGE)
-				showItemHeader(controller()->id=='trading', '/trading', 'Trading');
-
-			if (YAAMP_USE_NICEHASH_API)
-				showItemHeader(controller()->id=='nicehash', '/nicehash', 'Nicehash');
-
-			showItemHeader(controller()->id=='logout', '/admin/logout', 'Logout');
-		}
-		else {
-			showItemHeader(controller()->id=='login', '/admin/login', 'Login');
-		}
-	}
-
-	echo '<span style="float: right;">';
-
-	$nextpayout = '<span id="nextpayout" style="font-size: .8em;">Next Payout: temporarily unavailable</span>';
-	try {
-		$mining = getdbosql('db_mining');
-		if ($mining && isset($mining->last_payout)) {
-			$nextpayment = date('H:i T', $mining->last_payout+YAAMP_PAYMENTS_FREQ);
-			$eta = ($mining->last_payout+YAAMP_PAYMENTS_FREQ) - time();
-			$eta_mn = 'in '.round($eta / 60).' minutes';
-			$nextpayout = '<span id="nextpayout" style="font-size: .8em;" title="'.$eta_mn.'">Next Payout: '.$nextpayment.'</span>';
-		}
-	}
-	catch (CDbException $e) {
-		debuglog(__METHOD__.': unable to load next payout - '.$e->getMessage());
-	}
-
-	echo $nextpayout;
-
-	echo "</div>";
-	echo "</div>";
-}
-
-function showPageFooter()
-{
-	echo '<div class="footer">';
-	$year = date("Y", time());
-
-	echo "<p>&copy; $year ".YAAMP_SITE_NAME.' - '.
-		'<a href="https://github.com/Kudaraidee/yiimp">Open source Project</a></p>';
-
-	echo '</div><!-- footer -->';
-}
-
-

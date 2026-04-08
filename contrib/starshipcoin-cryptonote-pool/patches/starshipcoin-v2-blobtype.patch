@@ -1,0 +1,132 @@
+--- lib/pool.js.orig
++++ lib/pool.js
+@@ -105,6 +105,26 @@
+ 	offset = config.offset || 3;
+ }
+ 
++function getBlobTypeCandidates (preferredBlobType) {
++	let candidates = [preferredBlobType, 2, 0, 1, 3];
++	return candidates.filter((blobType, index) => candidates.indexOf(blobType) === index);
++}
++
++function resolveBlockBlobType (buffer, preferredBlobType, blockHeight) {
++	let lastError = null;
++	for (const blobType of getBlobTypeCandidates(preferredBlobType)) {
++		try {
++			utils.cnUtil.convert_blob(Buffer.from(buffer), blobType);
++			return blobType;
++		} catch (error) {
++			lastError = error;
++		}
++	}
++
++	let heightSuffix = typeof blockHeight === 'number' ? ` ${blockHeight}` : '';
++	throw new Error(`Failed to parse block${heightSuffix}${lastError ? ` (${lastError.message || lastError})` : ''}`);
++}
++
+ function Create2DArray (rows) {
+ 	let arr = [];
+ 	for (let i = 0; i < rows; i++) {
+@@ -256,6 +276,10 @@
+ 		this.seed_hash = template.seed_hash;
+ 		this.next_seed_hash = template.next_seed_hash;
+ 	}
++	this.blobType = resolveBlockBlobType(this.buffer, cnBlobType, this.height);
++	if (this.blobType !== cnBlobType) {
++		log('warn', logSystem, 'Resolved block blob type %d for height %d (configured %d)', [this.blobType, this.height, cnBlobType]);
++	}
+ 	var found_template_at = blob.indexOf(template_hex);
+ 	if (found_template_at !== -1) {
+ 		this.reserveOffset = offset + (found_template_at >> 1);
+@@ -282,9 +306,9 @@
+ 	nextBlob: function (index) {
+ 	    		this.buffer.writeUInt32BE(++this.extraNonce, this.reserveOffset);
+ 		if (mergedMining && this.childBlockTemplate) {
+-			return utils.cnUtil.convert_blob(this.buffer, cnBlobType, this.childBlockTemplate.buffer).toString('hex');
++			return utils.cnUtil.convert_blob(this.buffer, this.blobType, this.childBlockTemplate.buffer).toString('hex');
+ 		}
+-		return utils.cnUtil.convert_blob(this.buffer, cnBlobType).toString('hex');
++		return utils.cnUtil.convert_blob(this.buffer, this.blobType).toString('hex');
+ 	},
+ 	nextBlobWithChildNonce: function () {
+ 		// Write a 32 bit integer, big-endian style to the 0 byte of the reserve offset.
+@@ -1141,6 +1165,7 @@
+ function getShareBuffer (miner, job, blockTemplate, params) {
+ 	let nonce = params.nonce;
+ 	let resultHash = params.result;
++	let blobType = blockTemplate.blobType || cnBlobType;
+ 	let template = Buffer.alloc(blockTemplate.buffer.length);
+ 	if (!miner.proxy) {
+ 		blockTemplate.buffer.copy(template);
+@@ -1153,7 +1178,7 @@
+ 	}
+ 
+ 	try {
+-	    let shareBuffer = utils.cnUtil.construct_block_blob(template, Buffer.from(nonce, 'hex'), cnBlobType);
++	    let shareBuffer = utils.cnUtil.construct_block_blob(template, Buffer.from(nonce, 'hex'), blobType);
+ 		return shareBuffer;
+ 	} catch (e) {
+ 		log('error', logSystem, "Can't get share buffer with nonce %s from %s@%s: %s", [nonce, miner.login, miner.ip, e]);
+@@ -1169,6 +1194,7 @@
+ 	if (!shareBuffer) {
+ 		return false
+ 	}
++	let blobType = blockTemplate.blobType || cnBlobType;
+ 	let resultHash = params.result
+ 	let hash;
+ 	let shareType;
+@@ -1177,7 +1203,7 @@
+ 		hash = Buffer.from(resultHash, 'hex');
+ 		shareType = 'trusted';
+ 	} else {
+-	    let convertedBlob = utils.cnUtil.convert_blob(shareBuffer, cnBlobType);
++	    let convertedBlob = utils.cnUtil.convert_blob(shareBuffer, blobType);
+ 		let hard_fork_version = convertedBlob[0];
+ 
+ 		if (blockTemplate.isRandomX) {
+@@ -1204,14 +1230,14 @@
+ 
+ 	if (hashDiff.ge(blockTemplate.difficulty)) {
+ 
+-		apiInterfaces.rpcDaemon('submitblock', [shareBuffer.toString('hex')], function (error, result) {
+-			if (error) {
+-				log('error', logSystem, 'Error submitting block at height %d from %s@%s, share type: "%s" - %j', [job.height, miner.login, miner.ip, shareType, error]);
+-			} else {
+-			    let blockFastHash = utils.cnUtil.get_block_id(shareBuffer, cnBlobType).toString('hex');
+-				log('info', logSystem,
+-					'Block %s found at height %d by miner %s@%s - submit result: %j',
+-					[blockFastHash.substr(0, 6), job.height, miner.login, miner.ip, result]
++			apiInterfaces.rpcDaemon('submitblock', [shareBuffer.toString('hex')], function (error, result) {
++				if (error) {
++					log('error', logSystem, 'Error submitting block at height %d from %s@%s, share type: "%s" - %j', [job.height, miner.login, miner.ip, shareType, error]);
++				} else {
++				    let blockFastHash = utils.cnUtil.get_block_id(shareBuffer, blobType).toString('hex');
++					log('info', logSystem,
++						'Block %s found at height %d by miner %s@%s - submit result: %j',
++						[blockFastHash.substr(0, 6), job.height, miner.login, miner.ip, result]
+ 				);
+ 				recordShareData(miner, job, hashDiff.toString(), true, blockFastHash, shareType, blockTemplate, null);
+ 			}
+@@ -1231,14 +1257,14 @@
+ 
+ 	if (childBlockTemplate) {
+ 		if (mergedMining) {
+-			let pool = config.childPools[miner.activeChildPool]
+-			if (hashDiff.ge(childBlockTemplate.difficulty)) {
+-				let mergedBuffer = null
+-				try {
+-					mergedBuffer = utils.cnUtil.construct_mm_child_block_blob(shareBuffer, cnBlobType, childBlockTemplate.buffer);
+-				} catch (e) {
+-					log('error', logSystem, "Failed to construct MM child block: " + e);
+-				}
++				let pool = config.childPools[miner.activeChildPool]
++				if (hashDiff.ge(childBlockTemplate.difficulty)) {
++					let mergedBuffer = null
++					try {
++						mergedBuffer = utils.cnUtil.construct_mm_child_block_blob(shareBuffer, blobType, childBlockTemplate.buffer);
++					} catch (e) {
++						log('error', logSystem, "Failed to construct MM child block: " + e);
++					}
+ 				if (mergedBuffer === null) {
+ 					recordShareStatusMerged(miner, 'invalid');
+ 				} else {

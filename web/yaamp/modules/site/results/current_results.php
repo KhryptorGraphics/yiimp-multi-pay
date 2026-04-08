@@ -64,6 +64,8 @@ $total_coins = 0;
 $total_workers = 0;
 $total_solo_workers = 0;
 $showestimates = false;
+$interval = yaamp_hashrate_step();
+$active_delay = time() - $interval;
 echo "<tbody>";
 
 $total_coins = 0; $total_users = 0; $total_workers = 0; $total_solo_workers = 0; $users_total = 0;
@@ -156,8 +158,12 @@ foreach ($algos as $item)
             $symbol = $coin->getOfficialSymbol();
             echo "<tr class='ssrow'>";
             echo "<td align='left' valign='top' style='font-size: .8em;'><img width='10' src='" . $coin->image . "'>  <b>$name ($coin->symbol)</b> </td>";
-            $port_count = getdbocount('db_stratums', "algo=:algo and symbol=:symbol", array(':algo' => $algo,':symbol' => $coin->symbol));
-            $port_db = getdbosql('db_stratums', "algo=:algo and symbol=:symbol", array(':algo' => $algo,':symbol' => $coin->symbol));
+            $port_db = getdbosql(
+                'db_stratums',
+                "algo=:algo and symbol=:symbol and time>:cutoff ORDER BY time DESC, started DESC",
+                array(':algo' => $algo, ':symbol' => $coin->symbol, ':cutoff' => time() - 600)
+            );
+            $coin_port = $port_db && $port_db->port ? $port_db->port : (!empty($coin->dedicatedport) ? $coin->dedicatedport : $port);
 
             $auto_exchange = $coin->auto_exchange;
             if ($auto_exchange != 1) echo "<td align='center' valign='top' style='font-size: .8em;'><img width=13 src='/images/cancel.png'></td>";
@@ -166,24 +172,24 @@ foreach ($algos as $item)
 			$min_payout = max(floatval(YAAMP_PAYMENTS_MINI), floatval($coin->payout_min));
 			echo "<td align='center' style='font-size: .8em;'><b>".$min_payout." $symbol</b></td>";
 
-			if ($port_count >= 1) 
-				echo "<td align='center' style='font-size: .8em;'><b>".$port_db->port."</b></td>";
-			else 
-				echo "<td align='center' style='font-size: .8em;'><b>$port</b></td>";
+			echo "<td align='center' style='font-size: .8em;'><b>".$coin_port."</b></td>";
             
 			$users_total = getdbocount('db_accounts', "id IN (SELECT DISTINCT userid FROM workers)");
-			$users_coins = getdbocount('db_accounts', "coinid=:coinid and (id IN (SELECT DISTINCT userid FROM workers))", array(':coinid' => $coin->id));
-			if ($port_count >= 1) 
-				echo "<td align='center' style='font-size: .8em;'>$users_coins</td>";
-			else	
-				echo "<td align='center' style='font-size: .8em;'>$users_total</td>";
-            
-			$workers_coins = getdbocount('db_workers', "algo=:algo and pid=:pid and not password like '%m=solo%'", array(':algo' => $algo,':pid' => (is_null($port_db)?0 :$port_db->pid)));
-            $solo_workers_coins = getdbocount('db_workers', "algo=:algo and pid=:pid and password like '%m=solo%'", array(':algo' => $algo,':pid' => (is_null($port_db)?0 :$port_db->pid)));
-            if ($port_count == 1) 
-	    		echo "<td align='center' style='font-size: .8em;'>$workers_coins / $solo_workers_coins </td>";
-			else
-				echo "<td align='center' style='font-size: .8em;'>$workers / $solo_workers </td>";
+			$users_coins = (int) controller()->memcache->get_database_scalar(
+				"current_coin_users-{$coin->id}",
+				"SELECT COUNT(DISTINCT userid) FROM shares WHERE valid AND coinid={$coin->id} AND time>$active_delay"
+			);
+			echo "<td align='center' style='font-size: .8em;'>$users_coins</td>";
+
+			$workers_coins = (int) controller()->memcache->get_database_scalar(
+				"current_coin_workers-{$coin->id}",
+				"SELECT COUNT(DISTINCT workerid) FROM shares WHERE valid AND solo=0 AND workerid IS NOT NULL AND workerid>0 AND coinid={$coin->id} AND time>$active_delay"
+			);
+			$solo_workers_coins = (int) controller()->memcache->get_database_scalar(
+				"current_coin_solo_workers-{$coin->id}",
+				"SELECT COUNT(DISTINCT workerid) FROM shares WHERE valid AND solo=1 AND workerid IS NOT NULL AND workerid>0 AND coinid={$coin->id} AND time>$active_delay"
+			);
+	    	echo "<td align='center' style='font-size: .8em;'>$workers_coins / $solo_workers_coins </td>";
 			
             $pool_hash = yaamp_coin_rate($coin->id);
             $pool_hash_sfx = $pool_hash ? Itoa2($pool_hash) . 'h/s' : '0 h/s';

@@ -283,4 +283,3 @@ void job_broadcast(YAAMP_JOB *job)
 //
 //		maxhash = coind_nethash(job->coind)*coind_profitability(job->coind)/(g_current_algo->profit? g_current_algo->profit: 1);
 //	}
-

@@ -1,0 +1,16 @@
+[Unit]
+Description=YiiMP Blocks Loop (block monitoring)
+After=apache2.service network.target
+Wants=network.target
+
+[Service]
+User=www-data
+WorkingDirectory=/var/www
+ExecStart=/bin/bash /var/www/blocks.sh
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

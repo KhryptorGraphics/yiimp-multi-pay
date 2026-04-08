@@ -80,45 +80,87 @@ $publicHostInfo = getFullServerName();
 		<td>
 			<select id="drop-coin" style="border-style:solid; padding: 3px; font-family: monospace; border-radius: 5px;" onchange="generate()">
        <?php
+$coinOptions = array(
+	array(
+		'label' => 'Starshipcoin (STC)',
+		'symbol' => 'STC',
+		'algo' => 'cryptonight',
+		'port' => 36555,
+		'template' => 'xmrig -a cryptonight -o stratum+tcp://__HOST__:__PORT__ -u __WALLET__ -p __WORKER_OR_X__',
+		'supportsSolo' => 0,
+		'rigMode' => 'password',
+	),
+);
+
 $list = getdbolist('db_coins', "enable and visible and auto_ready order by algo asc");
 
-if (!$list) {
-    echo "<option disabled>No Coins Available</option>";
+if ($list) {
+	foreach ($list as $coin) {
+		$name = substr($coin->name, 0, 18);
+		$symbol = $coin->getOfficialSymbol();
+		$algo = $coin->algo;
+		$auto_exchange = isset($coin->auto_exchange) ? $coin->auto_exchange : 1;
+
+		$port_db = getdbosql('db_stratums', "algo=:algo and symbol=:symbol and time>:cutoff ORDER BY time DESC, started DESC", array(
+			':algo' => $algo,
+			':symbol' => $symbol,
+			':cutoff' => time() - 600,
+		));
+
+		if ($port_db && $port_db->port) {
+			$port = $port_db->port;
+		} else if (!empty($coin->dedicatedport)) {
+			$port = $coin->dedicatedport;
+		} else {
+			$port = getAlgoPort($algo);
+		}
+
+		$mc_param = ($auto_exchange == 0) ? ",mc=$symbol" : "";
+		$template = "-a $algo -o stratum+tcp://__HOST__:__PORT__ -u __WALLET__.__WORKER__ -p c=$symbol".$mc_param."__SOLO__";
+		if ($algo === 'spacescrypt' || $symbol === 'SPSC') {
+			$template = "spacescrypt-cpuminer -a $algo -o stratum+tcp://__HOST__:__PORT__ -u __WALLET__.__WORKER__ -p c=$symbol".$mc_param."__SOLO__";
+		}
+
+		$coinOptions[] = array(
+			'label' => "$name ($symbol)",
+			'symbol' => $symbol,
+			'algo' => $algo,
+			'port' => (int) $port,
+			'template' => $template,
+			'supportsSolo' => 1,
+			'rigMode' => 'username',
+		);
+	}
+}
+
+usort($coinOptions, function($left, $right) {
+	$algoCompare = strcasecmp($left['algo'], $right['algo']);
+	if ($algoCompare !== 0) return $algoCompare;
+	return strcasecmp($left['label'], $right['label']);
+});
+
+if (empty($coinOptions)) {
+	echo "<option disabled>No Coins Available</option>";
 } else {
-    $algoheading = "";
-    $count = 0;
+	$currentAlgo = '';
+	$selected = false;
+	foreach ($coinOptions as $option) {
+		if ($option['algo'] !== $currentAlgo) {
+			$currentAlgo = $option['algo'];
+			echo "<option disabled='disabled'>".CHtml::encode($currentAlgo)."</option>";
+		}
 
-    foreach ($list as $coin) {
-        $name = substr($coin->name, 0, 18);
-        $symbol = $coin->getOfficialSymbol();
-        $algo = $coin->algo;
-        $auto_exchange = isset($coin->auto_exchange) ? $coin->auto_exchange : 1; // Default to 1 if null
-
-        $port_db = getdbosql('db_stratums', "algo=:algo and symbol=:symbol", [
-            ':algo' => $algo,
-            ':symbol' => $symbol
-        ]);
-
-        // Try coin-specific port first, then fall back to algo port
-        if ($port_db && $port_db->port) {
-            $port = $port_db->port;
-        } else {
-            $port = getAlgoPort($algo);
-        }
-
-        // Add algorithm headings correctly
-        if ($count == 0 || $algo != $algoheading) {
-            echo "<option disabled='disabled'>$algo</option>";
-        }
-
-        // Append mc=SYMBOL only if auto_exchange is 0
-        $mc_param = ($auto_exchange == 0) ? ",mc=$symbol" : "";
-
-        echo "<option value='$symbol' data-port='$port' data-algo='-a $algo' data-symbol='$symbol' data-extra='-p c=$symbol$mc_param'>$name ($symbol)</option>";
-
-        $count++;
-        $algoheading = $algo;
-    }
+		$selectedAttr = !$selected ? " selected='selected'" : '';
+		$selected = true;
+		echo "<option value='".CHtml::encode($option['symbol'])."'"
+			." data-port='".(int) $option['port']."'"
+			." data-symbol='".CHtml::encode($option['symbol'])."'"
+			." data-template='".CHtml::encode($option['template'])."'"
+			." data-supports-solo='".(int) $option['supportsSolo']."'"
+			." data-rig-mode='".CHtml::encode($option['rigMode'])."'"
+			.$selectedAttr
+			.">".CHtml::encode($option['label'])."</option>";
+	}
 }
 ?>
 
@@ -140,7 +182,7 @@ if (!$list) {
 </tbody>
 <tbody>
 	<tr>
-		<td colspan="5"><p class="main-left-box" style="padding: 3px; background-color: #ffffee; font-family: monospace;" id="output">-a  -o stratum+tcp://<?=YAAMP_STRATUM_URL?>:0000 -u . -p c=</p></td>
+		<td colspan="5"><p class="main-left-box" style="padding: 3px; background-color: #ffffee; font-family: monospace;" id="output">loading...</p></td>
 	</tr>
 </tbody>
 </table>
@@ -148,7 +190,8 @@ if (!$list) {
 <ul>
 <li>&lt;WALLET_ADDRESS&gt; must be valid for the currency you mine. <b>DO NOT USE a BTC address here, the auto exchange is disabled on these stratums</b>!</li>
 <!-- <li><b>Our stratums are now NiceHASH compatible and ASICBoost enabled, please message support if you have any issues.</b></li> -->
-<li>See the "<?=YAAMP_SITE_NAME?> coins" area on the right for PORT numbers. You may mine any coin regardless if the coin is enabled or not for autoexchange. Payouts will only be made in that coins currency.</li>
+<li>The coin selector includes both <b>Starshipcoin (STC)</b> on the CryptoNote sidecar pool and <b>StarShip (SPSC)</b> on the native yiimp SpaceScrypt pool.</li>
+<li>For <b>Starshipcoin (STC)</b>, keep the wallet in the username field and use the rig name as the password. For yiimp coins like <b>SPSC</b>, the rig name is appended to the username as <span style="font-family: monospace;">wallet.worker</span>.</li>
 <li>Payouts are made automatically every hour for all balances above <b><?=$min_payout?></b>, or <b><?=$min_sunday?></b> on Sunday.</li>
 <br>
 </ul>
@@ -201,6 +244,8 @@ endif;
 </td><td valign=top>
 <!--  -->
 
+<?php $this->renderPartial('results/starshipcoin_results'); ?>
+
 <div id='pool_current_results'>
 <br><br><br><br><br><br><br><br><br><br>
 </div>
@@ -234,8 +279,6 @@ function select_algo(algo)
 {
     window.location.href = '/site/algo?algo='+algo+'&r=/';
 }
-
-////////////////////////////////////////////////////
 
 function pool_current_ready(data)
 {
@@ -277,29 +320,59 @@ function pool_coins_info_refresh()
 </script>
 
 <script>
+function getSelectedCoinOption() {
+    var coin = document.getElementById('drop-coin');
+    if (!coin || !coin.options.length) return null;
+
+    var option = coin.options[coin.selectedIndex];
+    if (option && option.dataset && option.dataset.template) return option;
+
+    for (var i = 0; i < coin.options.length; i++) {
+        if (coin.options[i].dataset && coin.options[i].dataset.template) {
+            coin.selectedIndex = i;
+            return coin.options[i];
+        }
+    }
+
+    return null;
+}
+
+function updateGeneratorUi(option) {
+    var rigName = document.getElementById('text-rig-name');
+    var solo = document.getElementById('drop-solo');
+    if (!option) return;
+
+    var rigMode = option.dataset.rigMode || 'username';
+    rigName.placeholder = rigMode === 'password' ? 'worker1' : '001';
+
+    var supportsSolo = option.dataset.supportsSolo === '1';
+    solo.disabled = !supportsSolo;
+    if (!supportsSolo) solo.value = '';
+}
+
 function getLastUpdated(){
     var stratum = document.getElementById('drop-stratum');
-    var coin = document.getElementById('drop-coin');
     var solo = document.getElementById('drop-solo');
     var wallet = document.getElementById('text-wallet').value.trim();
     var rigName = document.getElementById('text-rig-name').value.trim();
-    var result = '';
+    var option = getSelectedCoinOption();
+    if (!option) return 'Select a coin to generate a miner command.';
 
-    var algo = coin.options[coin.selectedIndex].dataset.algo;
-    var port = coin.options[coin.selectedIndex].dataset.port;
-    var symbol = coin.options[coin.selectedIndex].dataset.symbol;
-    var extra = coin.options[coin.selectedIndex].dataset.extra; // Already contains "-p c=MTBC,mc=MTBC" if needed
+    updateGeneratorUi(option);
 
-    result += algo + ' -o stratum+tcp://';
-    result += stratum.value + '<?=YAAMP_STRATUM_URL?>:' + port + ' -u ';
+    var template = option.dataset.template || '';
+    var supportsSolo = option.dataset.supportsSolo === '1';
+    var host = stratum.value + '<?=YAAMP_STRATUM_URL?>';
+    var workerName = rigName ? rigName : 'WORKER_NAME';
+    var workerOrX = rigName ? rigName : 'x';
 
-    result += wallet ? wallet : 'WALLET_ADDRESS';
-    result += rigName ? '.' + rigName : '.WORKER_NAME';
-
-    result += ' ' + extra; // Removed second "-p"
-    result += solo.value;  // Append solo mining option if selected
-
-    return result;
+    return template
+        .replace(/__HOST__/g, host)
+        .replace(/__PORT__/g, option.dataset.port || '0')
+        .replace(/__WALLET__/g, wallet ? wallet : 'WALLET_ADDRESS')
+        .replace(/__WORKER__/g, workerName)
+        .replace(/__WORKER_OR_X__/g, workerOrX)
+        .replace(/__SOLO__/g, supportsSolo ? solo.value : '');
 }
 
 function generate(){

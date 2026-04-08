@@ -1,4 +1,31 @@
+<?php
+
+$spaceship = getdbosql('db_coins', "symbol=:symbol", array(':symbol' => 'SPSC'));
+$spaceshipPort = ($spaceship && !empty($spaceship->dedicatedport)) ? (int) $spaceship->dedicatedport : 12478;
+$spaceshipExplorer = '/explorer/SPSC';
+$starshipcoinStats = 'http://pool.giggahash.com:8117/stats';
+
+?>
 <br>
+
+<div class="main-left-box">
+<div class="main-left-title">StarShip Mining Quick Reference</div>
+<div class="main-left-inner">
+
+<p><b>Starshipcoin (STC)</b><br/>
+Algorithm: CryptoNote / cryptonight<br/>
+General mining port: <span style="font-family: monospace;">pool.giggahash.com:36555</span><br/>
+Stats API: <a href="<?= CHtml::encode($starshipcoinStats) ?>"><?= CHtml::encode($starshipcoinStats) ?></a></p>
+
+<p><b>StarShip (SPSC)</b><br/>
+Algorithm: SpaceScrypt<br/>
+Stratum: <span style="font-family: monospace;"><?= CHtml::encode(YAAMP_STRATUM_URL) ?>:<?= $spaceshipPort ?></span><br/>
+Explorer: <a href="<?= CHtml::encode($spaceshipExplorer) ?>"><?= CHtml::encode($spaceshipExplorer) ?></a></p>
+
+<p><b>Yiimp API checks for SPSC</b><br/>
+Use <span style="font-family: monospace;"><?= CHtml::encode('http://'.YAAMP_API_URL.'/api/status') ?></span> and inspect the <span style="font-family: monospace;">spacescrypt</span> object for the live port, worker counts, and hashrate. Use <span style="font-family: monospace;"><?= CHtml::encode('http://'.YAAMP_API_URL.'/api/currencies') ?></span> and inspect the <span style="font-family: monospace;">SPSC</span> entry for StarShip height, workers, port, and recent block timing.</p>
+
+</div></div>
 
 <div class="main-left-box">
 <div class="main-left-title">YiiMP API</div>
@@ -199,5 +226,3 @@ request:
 
 
 </script>
-
-

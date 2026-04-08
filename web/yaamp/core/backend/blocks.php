@@ -449,14 +449,6 @@ function BackendBlockFind2($coinid = NULL)
 			$blockext = $remote->getblock($transaction['blockhash']);
 			if(!$blockext) continue;
 
-			$db_block = getdbosql('db_blocks', "coin_id=:id AND (blockhash=:hash OR height=:height)",
-				array(':id'=>$coin->id, ':hash'=>$transaction['blockhash'], ':height'=>$blockext['height'])
-			);
-			if($db_block) continue;
-
-			if ($coin->rpcencoding == 'DCR')
-				debuglog("{$coin->name} generated block {$blockext['height']} detected!");
-
 			if($transaction['time'] > $mostrecent) {
 				$coin = getdbo('db_coins', $coin->id); // refresh coin data
 				$coin->lastblock = $transaction['blockhash'];
@@ -464,10 +456,29 @@ function BackendBlockFind2($coinid = NULL)
 				$mostrecent = $transaction['time'];
 			}
 
-			$db_block = new db_blocks;
+			$db_block = getdbosql('db_blocks', "coin_id=:id AND (blockhash=:hash OR height=:height)",
+				array(':id'=>$coin->id, ':hash'=>$transaction['blockhash'], ':height'=>$blockext['height'])
+			);
+			$update_existing = false;
+			$has_earnings = false;
+			if($db_block) {
+				$update_existing =
+					in_array($db_block->category, array('new', 'orphan')) ||
+					empty($db_block->confirmations) ||
+					(empty($db_block->amount) && (double) arraySafeVal($transaction, 'amount', 0) > 0);
+				if(!$update_existing) continue;
+				$has_earnings = getdbocount('db_earnings', 'blockid=:id', array(':id'=>$db_block->id)) > 0;
+			}
+
+			if ($coin->rpcencoding == 'DCR')
+				debuglog("{$coin->name} generated block {$blockext['height']} detected!");
+
+			if(!$db_block)
+				$db_block = new db_blocks;
+
 			$db_block->blockhash = $transaction['blockhash'];
 			$db_block->coin_id = $coin->id;
-			$db_block->category = 'immature';			//$transaction['category'];
+			$db_block->category = $transaction['category'];
 			$db_block->time = $transaction['time'];
 			$db_block->amount = (isset($transaction['amount']))? $transaction['amount'] : 0;
 			$db_block->algo = $coin->algo;
@@ -506,7 +517,8 @@ function BackendBlockFind2($coinid = NULL)
 			if (!$db_block->save())
 				debuglog(__FUNCTION__.": unable to insert block!");
 
-			BackendBlockNew($coin, $db_block);
+			if(!$has_earnings)
+				BackendBlockNew($coin, $db_block);
 		} // tx
 	}
 

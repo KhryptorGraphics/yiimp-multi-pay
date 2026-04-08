@@ -23,12 +23,12 @@ $drop_address = getparam('drop');
 if (!empty($drop_address)) {
 	// to clean cookies
 	foreach($recents as $k=>$addr) {
-		if ($addr == $drop_address) {
-			unset($recents[$k]);
-			if (controller()->admin)
-				setcookie('wallets', implode("|", $recents), time()+60*60*24*30, '/');
-			break;
-		}
+			if ($addr == $drop_address) {
+				unset($recents[$k]);
+				if (controller()->admin && !headers_sent())
+					setcookie('wallets', implode("|", $recents), time()+60*60*24*30, '/');
+				break;
+			}
 	}
 }
 
@@ -38,6 +38,18 @@ if($user)
 	user()->setState('yaamp-wallet', $user->username);
 	$recents[$user->username] = $user->username;
 
+	if(empty($user->hostaddr) && !$this->admin) {
+		$user->hostaddr = $_SERVER['REMOTE_ADDR'];
+		$user->save();
+	}
+}
+
+$username = $user? $user->username: '';
+
+if(!controller()->admin && !headers_sent())
+	setcookie('wallets', implode("|", $recents), time()+60*60*24*30, '/');
+
+if($user) {
 	$coin = getdbo('db_coins', $user->coinid);
 	if($coin) echo <<<END
 	<script type="text/javascript">
@@ -47,17 +59,7 @@ if($user)
 	});
 	</script>
 END;
-
-	if(empty($user->hostaddr) && !$this->admin) {
-		$user->hostaddr = $_SERVER['REMOTE_ADDR'];
-		$user->save();
-	}
 }
-
-$username = $user? $user->username: '';
-
-if(!controller()->admin)
-	setcookie('wallets', implode("|", $recents), time()+60*60*24*30, '/');
 
 echo <<<END
 <div id='resume_update_button' style='color: #444; background-color: #ffd; border: 1px solid #eea;
@@ -158,6 +160,8 @@ foreach($recents as $addr)
 echo "</table></form></div></div><br>";
 
 echo "</td><td valign=top>";
+
+$this->renderPartial('results/starshipcoin_results');
 
 echo <<<END
 <div id='pool_current_results'>
@@ -436,4 +440,3 @@ function drop_cookie(el)
 
 
 END;
-

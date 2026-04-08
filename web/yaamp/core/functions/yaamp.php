@@ -73,6 +73,7 @@ function yaamp_get_algo_norm($algo)
 		'sha256'	=> 1.0,
 		'curvehash'	=> 1.0,
 		'scrypt'	=> 1.0,
+		'spacescrypt'	=> 1.0,
 		'scryptn'	=> 1.0,
 		'x11'		=> 1.0,
 		'x13'		=> 1.0,
@@ -258,41 +259,38 @@ function yaamp_hashrate_step()
 }
 
 function yaamp_coin_nethash($coin , $coin_powlimit_bits = null , $coin_difficulty = null, $coin_reward = null, $coin_price = null) {
-
-	/*
-	$network_hash = controller()
-	->memcache
-	->get("yiimp-nethashrate-{$coin->symbol}");
-	if (!$network_hash)
-	{
-		$remote = new WalletRPC($coin);
-		if ($remote) $info = $remote->getmininginfo();
-		if (isset($info['networkhashps']))
-		{
-			$network_hash = $info['networkhashps'];
-			controller()
-				->memcache
-				->set("yiimp-nethashrate-{$coin->symbol}", $info['networkhashps'], 60);
-		}
-		else if (isset($info['netmhashps']))
-		{
-			$network_hash = floatval($info['netmhashps']) * 1e6;
-			controller()
-				->memcache
-				->set("yiimp-nethashrate-{$coin->symbol}", $network_hash, 60);
-		}
-		if ($network_hash) return $network_hash;
+	$network_hash = controller()->memcache->get("yiimp-nethashrate-{$coin->symbol}");
+	if (is_numeric($network_hash) && $network_hash > 0) {
+		return (float) $network_hash;
 	}
-	*/
+
+	$remote = new WalletRPC($coin);
+	if ($remote) {
+		$info = $remote->getmininginfo();
+		if (isset($info['networkhashps']) && is_numeric($info['networkhashps']) && $info['networkhashps'] > 0) {
+			$network_hash = (float) $info['networkhashps'];
+			controller()->memcache->set("yiimp-nethashrate-{$coin->symbol}", $network_hash, 60);
+			return $network_hash;
+		}
+		if (isset($info['netmhashps']) && is_numeric($info['netmhashps']) && $info['netmhashps'] > 0) {
+			$network_hash = (float) $info['netmhashps'] * 1e6;
+			controller()->memcache->set("yiimp-nethashrate-{$coin->symbol}", $network_hash, 60);
+			return $network_hash;
+		}
+	}
+
+	if (is_numeric($coin->network_hash) && $coin->network_hash > 0) {
+		return (float) $coin->network_hash;
+	}
 
     if (is_null($coin_powlimit_bits)) {
-        if (!is_null($coin->powlimit_bits)) {
+        if (!is_null($coin->powlimit_bits) && $coin->powlimit_bits > 0) {
             $coin_powlimit_bits = $coin->powlimit_bits;
         }
         else {
             $algo_list = yaamp_get_algo_list(false);
             foreach($algo_list as $current_algo) {
-                 if ($current_algo['name'] != $coin->algo) continue;
+                 if ($current_algo['name'] != $coin->algo || empty($current_algo['powlimit_bits'])) continue;
                  $coin_powlimit_bits = $current_algo['powlimit_bits'];
             }
         }

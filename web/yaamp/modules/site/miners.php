@@ -26,6 +26,11 @@ echo <<<end
 </div>
 
 </td><td valign=top>
+end;
+
+$this->renderPartial('results/starshipcoin_results');
+
+echo <<<end
 
 <div id='pool_current_results'>
 <br><br><br><br><br><br><br><br><br><br>
@@ -81,8 +86,6 @@ function miners_refresh()
 
 
 end;
-
-
 
 
 

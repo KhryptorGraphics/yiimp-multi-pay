@@ -1,23 +1,18 @@
-# New 2026 PoW Coins - Setup Guide
+# New 2026 PoW Coins - Integration Notes
 
 Created: 2026-03-22
 
-## Coins Added
+## Supported Coin
 
 | Symbol | Name | Algorithm | Stratum Port | RPC Port | Config File |
 |--------|------|-----------|--------------|----------|-------------|
-| SILVR | Silver Protocol | sha256d | 17333 | 17333 | silvr.conf |
-| BRICS | BricsCoin | sha256 | 17334 | 17334 | brics.conf |
-| QNTM | Quantum Token | scrypt | 17335 | 17335 | qntm.conf |
-| NXF | NexaFlow | sha256d | 17336 | 17336 | nexaflow.conf |
+| QNTM | Quantum Token | scrypt | 17337 | 17335 | qntm.conf |
 
 ## Files Created
 
 - `sql/2026-03-22-add-new-2026-coins.sql` - Database migration
-- `stratum/config.sample/silvr.conf` - SILVR stratum config
-- `stratum/config.sample/brics.conf` - BricsCoin stratum config
 - `stratum/config.sample/qntm.conf` - QNTM stratum config
-- `stratum/config.sample/nexaflow.conf` - NexaFlow stratum config
+- `sql/2026-03-30-remove-nonrpc-coins.sql` - Cleanup migration for unsupported coins
 
 ## Setup Steps
 
@@ -29,135 +24,79 @@ mysql yaamp < /home/kp/repos/yiimp/sql/2026-03-22-add-new-2026-coins.sql
 
 ### 2. Deploy Coin Wallets
 
-Download and install wallets from ANN threads:
+Download and install the `QNTM` wallet from:
 
-- **SILVR**: https://github.com/him-SILVR/SILVR (MAINNET LIVE as of March 16, 2026)
-- **BricsCoin**: https://codeberg.org/Bricscoin_26/Bricscoin
 - **QNTM**: https://quantum-token.net/ (Windows/Linux wallets available)
-- **NexaFlow**: https://github.com/nexaflow-ledger (Mainnet launch March 31, 2026)
 
 ### 3. Configure Coin Daemons
 
 Create daemon config files in `/etc/` (or wallet directory):
 
-**SILVR** (`silvr.conf`):
-```ini
-rpcuser=silvr
-rpcpassword=S1lv3r#Rpc$K9x2mNq8
-rpcport=17333
-rpcallowip=127.0.0.1
-server=1
-daemon=1
-listen=1
-# Note: P2P Port is 8633, Chain ID 2026
-# Addnodes: Contact SILVR dev for addnode list
-```
-
-**BRICS** (`brics.conf`):
-```ini
-rpcuser=brics
-rpcpassword=Br1csC0in#Rpc$J5k9mNv2
-rpcport=17334
-rpcallowip=127.0.0.1
-server=1
-daemon=1
-listen=1
-# Note: Contact BricsCoin dev for addnode list
-# Website brics-coin.com is currently suspended
-```
-
 **QNTM** (`qntm.conf`):
 ```ini
 rpcuser=qntm
-rpcpassword=Qn7mT0k3n#Rpc$W8x3pLv1
+rpcpassword=Qn7mT0k3nRpcW8x3pLv1
 rpcport=17335
 rpcallowip=127.0.0.1
+rpcbind=127.0.0.1
 server=1
-daemon=1
+daemon=0
 listen=1
+txindex=1
 addnode=77.105.161.72
-```
-
-**NXF** (`nxf.conf`):
-```ini
-rpcuser=nxf
-rpcpassword=N3x4Fl0w#Rpc$M2k7qRv9
-rpcport=17336
-rpcallowip=127.0.0.1
-server=1
-daemon=1
-listen=1
-# Note: Uses RPCA/BFT consensus, not traditional PoW addnodes
-# Main coin is not mineable - only Programmable Micro Coins use PoW
 ```
 
 ### 4. Copy Stratum Configs
 
 ```bash
-cp /home/kp/repos/yiimp/stratum/config.sample/silvr.conf /etc/yiimp/
-cp /home/kp/repos/yiimp/stratum/config.sample/brics.conf /etc/yiimp/
-cp /home/kp/repos/yiimp/stratum/config.sample/qntm.conf /etc/yiimp/
-cp /home/kp/repos/yiimp/stratum/config.sample/nexaflow.conf /etc/yiimp/
+sudo install -D -m 0644 /home/kp/repos/yiimp/stratum/config.sample/silvr.conf /etc/yiimp/stratum/silvr.conf
+sudo install -D -m 0644 /home/kp/repos/yiimp/stratum/config.sample/brics.conf /etc/yiimp/stratum/brics.conf
+sudo install -D -m 0644 /home/kp/repos/yiimp/stratum/config.sample/qntm.conf /etc/yiimp/stratum/scrypt-qntm.conf
 ```
 
-### 5. Update supervisord.conf
+### 5. Install Process Units
 
-Add stratum processes for each coin:
+The current host uses `systemd`, not `supervisord`. Install unit files under `/etc/systemd/system/` and point them at `/etc/yiimp/stratum/*.conf`.
 
 ```ini
-[program:stratum-silvr]
-command=/usr/local/bin/stratum /etc/yiimp/silvr.conf
-autostart=true
-autorestart=true
-stdout_logfile=/var/log/stratum/silvr.log
-stderr_logfile=/var/log/stratum/silvr.error.log
+[Unit]
+Description=YiiMP Stratum Scrypt-QNTM dedicated
+After=network.target
+Wants=network.target
 
-[program:stratum-brics]
-command=/usr/local/bin/stratum /etc/yiimp/brics.conf
-...
+[Service]
+ExecStart=/usr/local/bin/stratum /etc/yiimp/stratum/scrypt-qntm.conf
+Restart=always
+RestartSec=5
 
-[program:stratum-qntm]
-command=/usr/local/bin/stratum /etc/yiimp/qntm.conf
-...
-
-[program:stratum-nexaflow]
-command=/usr/local/bin/stratum /etc/yiimp/nexaflow.conf
-...
+[Install]
+WantedBy=multi-user.target
 ```
 
 ### 6. Enable Mining (After Wallet Sync)
 
 ```sql
-UPDATE coins SET mining=1, enabled=1 WHERE symbol IN ('SILVR','BRICS','QNTM','NXF');
+UPDATE coins
+SET enable=1, visible=1, installed=1, auto_ready=1, dedicatedport=17337
+WHERE symbol = 'QNTM';
 ```
-
-Or via Yiimp admin panel.
 
 ### 7. Restart Services
 
 ```bash
-supervisorctl reread
-supervisorctl update
-supervisorctl restart all
+sudo systemctl daemon-reload
+sudo systemctl enable qntmd stratum-scrypt-qntm
+sudo systemctl restart qntmd stratum-scrypt-qntm
 ```
 
-## ANN Thread References
+## ANN Thread Reference
 
-- SILVR: https://bitcointalk.org/index.php?topic=5577498.0
-- BricsCoin: https://bitcointalk.org/index.php?topic=5577339.0
 - QNTM: https://bitcointalk.org/index.php?topic=5576829.0
-- NexaFlow: https://bitcointalk.org/index.php?topic=5576225.0
 
 ## Addnodes Summary
 
-### Found
 - **QNTM**: `addnode=77.105.161.72`
-
-### NOT Found (Contact coin devs)
-- **SILVR**: No addnodes in ANN. Contact via GitHub or mine solo initially.
-- **BricsCoin**: Website suspended. Contact via Codeberg or Bitcointalk.
-- **NexaFlow**: Uses RPCA/BFT consensus. No traditional PoW addnodes.
 
 ## Existing Pools
 
-- **QNTM**: Already has pools running (e.g., miningcoin.online:3433, altcoinspool.cc:8611)
+- **QNTM**: ANN references external pool support. Validate protocol compatibility locally before enabling.

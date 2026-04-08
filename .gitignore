@@ -11,6 +11,7 @@ stratum/config/
 log/
 *.log
 web/images/*
+!web/images/coin-generic.png
 web/yaamp/runtime/*
 cookies/
 bin/blocknotif
@@ -23,3 +24,17 @@ web/yaamp/.idea/
 *.0
 .vscode/
 .gitnexus
+.claude/
+.codemap/
+.factory/
+.live-sync/
+.local/
+api_page.png
+giggahash_home.png
+giggahash_homepage.png
+homepage_*.png
+homepage_*.txt
+miners_page.png
+mining_*.png
+mining_*.txt
+screenshot-*.png

@@ -12,16 +12,16 @@ function BackendRentingUpdate()
 	dborun("update jobs set active=false where not ready");
 	foreach(yaamp_get_algos() as $algo)
 	{
-		$rent = dboscalar("select rent from hashrate where algo=:algo order by time desc limit 1", array(':algo'=>$algo));
+		$rent = (double) dboscalar("select rent from hashrate where algo=:algo order by time desc limit 1", array(':algo'=>$algo));
 
-		dborun("update jobs set active=true where ready and price>$rent and algo=:algo", array(':algo'=>$algo));
-		dborun("update jobs set active=false where active and price<$rent and algo=:algo", array(':algo'=>$algo));
+		dborun("update jobs set active=true where ready and price>:rent and algo=:algo", array(':rent'=>$rent, ':algo'=>$algo));
+		dborun("update jobs set active=false where active and price<:rent and algo=:algo", array(':rent'=>$rent, ':algo'=>$algo));
 	}
 
 	$list = getdbolist('db_jobsubmits', "status=0");
 	foreach($list as $submit)
 	{
-		$rent = dboscalar("select rent from hashrate where algo=:algo order by time desc limit 1", array(':algo'=>$submit->algo));
+		$rent = (double) dboscalar("select rent from hashrate where algo=:algo order by time desc limit 1", array(':algo'=>$submit->algo));
 		$amount = $rent * $submit->difficulty / 20116.56761169;
 
 		$factor = yaamp_algo_mBTC_factor($submit->algo); // 1000 for sha256
@@ -267,7 +267,6 @@ function BackendUpdateDeposit()
 	}
 
 }
-
 
 
 

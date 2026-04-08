@@ -1,0 +1,16 @@
+[Unit]
+Description=YiiMP Loop2 (secondary maintenance)
+After=apache2.service network.target
+Wants=network.target
+
+[Service]
+User=www-data
+WorkingDirectory=/var/www
+ExecStart=/bin/bash /var/www/loop2.sh
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

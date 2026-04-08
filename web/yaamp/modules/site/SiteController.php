@@ -19,6 +19,11 @@ class SiteController extends CommonController
 		$this->render('api');
 	}
 
+	public function actionWallet()
+	{
+		$this->render('wallet');
+	}
+
 	public function actionBenchmarks()
 	{
 		$this->render('benchmarks');
@@ -80,6 +85,18 @@ class SiteController extends CommonController
 		echo $raw;
 	}
 
+	protected function renderPartialOnce($partial, $data=null)
+	{
+		static $rendered_partials = array();
+
+		if (isset($rendered_partials[$partial])) {
+			return;
+		}
+
+		$rendered_partials[$partial] = true;
+		echo $this->renderPartial($partial, $data, true);
+	}
+
 	// Pool Status : public right panel with all algos and live stats
 	public function actionCurrent_results()
 	{
@@ -135,37 +152,37 @@ class SiteController extends CommonController
 
 	public function actionWallet_results()
 	{
-		$this->renderPartial('results/wallet_results');
+		$this->renderPartialOnce('results/wallet_results');
 	}
 
 	public function actionWallet_miners_results()
 	{
-		$this->renderPartial('results/wallet_miners_results');
+		$this->renderPartialOnce('results/wallet_miners_results');
 	}
 
 	public function actionWallet_graphs_results()
 	{
-		$this->renderPartial('results/wallet_graphs_results');
+		$this->renderPartialOnce('results/wallet_graphs_results');
 	}
 
 	public function actionGraph_earnings_results()
 	{
-		$this->renderPartial('results/graph_earnings_results');
+		$this->renderPartialOnce('results/graph_earnings_results');
 	}
 
 	public function actionUser_earning_results()
 	{
-		$this->renderPartial('results/user_earning_results');
+		$this->renderPartialOnce('results/user_earning_results');
 	}
 
 	public function actionWallet_found_results()
 	{
-		$this->renderPartial('results/wallet_found_results');
+		$this->renderPartialOnce('results/wallet_found_results');
 	}
 
 	public function actionGraph_user_results()
 	{
-		$this->renderPartial('results/graph_user_results');
+		$this->renderPartialOnce('results/graph_user_results');
 	}
 
 	public function actionTitle_results()
@@ -207,7 +224,7 @@ class SiteController extends CommonController
 
 	public function actionBlock_results()
 	{
-		$this->renderPartial('block_results');
+		$this->renderPartialOnce('block_results');
 	}
 
 	//////////////////////////////////////////////////////////////////////////////////////

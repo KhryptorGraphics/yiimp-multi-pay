@@ -19,7 +19,8 @@ static bool job_assign_client(YAAMP_JOB *job, YAAMP_CLIENT *client, double maxha
 	RETURN_ON_CONDITION(maxhash > 0 && job->speed + client->speed > maxhash, true);
 
 	bool specific_mining = (client->coins_mining_list.size() > 0 );
-	bool coin_to_mine = (std::find(client->coins_mining_list.begin(), client->coins_mining_list.end(), job->coind->symbol) != client->coins_mining_list.end()) ||
+	bool coin_to_mine = client->coinid == job->coind->id ||
+						(std::find(client->coins_mining_list.begin(), client->coins_mining_list.end(), job->coind->symbol) != client->coins_mining_list.end()) ||
 						(std::find(client->coins_mining_list.begin(), client->coins_mining_list.end(), job->coind->symbol2) != client->coins_mining_list.end());
 	bool coin_to_ignore = (std::find(client->coins_ignore_list.begin(), client->coins_ignore_list.end(), job->coind->symbol) != client->coins_ignore_list.end()) ||
 						  (std::find(client->coins_ignore_list.begin(), client->coins_ignore_list.end(), job->coind->symbol2) != client->coins_ignore_list.end());
@@ -224,7 +225,8 @@ void job_assign_clients_left(double factor)
 		for(CLI li = g_list_client.first; li; li = li->next)
 		{
 			YAAMP_CLIENT *client = (YAAMP_CLIENT *)li->data;
-			bool coin_to_mine = (std::find(client->coins_mining_list.begin(), client->coins_mining_list.end(), coind->symbol) != client->coins_mining_list.end()) ||
+			bool coin_to_mine = client->coinid == coind->id ||
+								(std::find(client->coins_mining_list.begin(), client->coins_mining_list.end(), coind->symbol) != client->coins_mining_list.end()) ||
 								(std::find(client->coins_mining_list.begin(), client->coins_mining_list.end(), coind->symbol2) != client->coins_mining_list.end());
 			bool coin_to_ignore = (std::find(client->coins_ignore_list.begin(), client->coins_ignore_list.end(), coind->symbol) != client->coins_ignore_list.end()) ||
 								  (std::find(client->coins_ignore_list.begin(), client->coins_ignore_list.end(), coind->symbol2) != client->coins_ignore_list.end());

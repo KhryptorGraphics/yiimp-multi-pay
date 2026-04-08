@@ -284,7 +284,8 @@ class CoinCommand extends CConsoleCommand
 		}
 
 		// note: rpc not compatible with decred
-		$txs = $remote->listtransactions($coin->account, 900);
+		$account = empty($coin->account) ? '*' : $coin->account;
+		$txs = $remote->listtransactions($account, 900);
 		if(!$txs || !is_array($txs)) {
 			echo "no txs found!\n";
 			return 0;

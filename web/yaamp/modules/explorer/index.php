@@ -3,6 +3,8 @@
 JavascriptFile("/yaamp/ui/js/jquery.metadata.js");
 JavascriptFile("/yaamp/ui/js/jquery.tablesorter.widgets.js");
 
+$starship = getdbosql('db_coins', "symbol=:symbol", array(':symbol' => 'SPSC'));
+
 echo <<<end
 <script type="text/javascript">
 function wallet_peers(id)
@@ -17,6 +19,27 @@ a.low { color: red; font-weight: bold; }
 </style>
 
 <br/>
+end;
+
+if ($starship) {
+	$starshipExplorer = '/explorer/'.$starship->symbol;
+	$starshipPeers = '/explorer/peers?id='.$starship->id;
+	$starshipMining = '/site/mining';
+	echo <<<end
+<div class="main-left-box">
+<div class="main-left-title">StarShip (SPSC) Explorer</div>
+<div class="main-left-inner">
+<p><b>Chain</b>: StarShip (<b>SPSC</b>)<br/>
+<b>Algorithm</b>: SpaceScrypt<br/>
+<b>Public explorer</b>: <a href="$starshipExplorer">$starshipExplorer</a><br/>
+<b>Peer view</b>: <a href="$starshipPeers">$starshipPeers</a><br/>
+<b>Mining page</b>: <a href="$starshipMining">$starshipMining</a></p>
+</div></div>
+
+end;
+}
+
+echo <<<end
 <div class="main-left-box">
 <div class="main-left-title">Block Explorer</div>
 <div class="main-left-inner">
@@ -48,6 +71,11 @@ echo <<<end
 end;
 
 $list = getdbolist('db_coins', "enable and visible order by name");
+usort($list, function($left, $right) {
+	if ($left->symbol === 'SPSC' && $right->symbol !== 'SPSC') return -1;
+	if ($right->symbol === 'SPSC' && $left->symbol !== 'SPSC') return 1;
+	return strcasecmp($left->name, $right->name);
+});
 foreach($list as $coin)
 {
 	if($coin->symbol == 'BTC') continue;
@@ -56,8 +84,8 @@ foreach($list as $coin)
 	$coin->version = formatWalletVersion($coin);
 
 	//if (!$coin->network_hash)
-		$coin->network_hash = controller()->memcache->get("yiimp-nethashrate-{$coin->symbol}");
-	if (!$coin->network_hash) {
+	$coin->network_hash = controller()->memcache->get("yiimp-nethashrate-{$coin->symbol}");
+	if (!$coin->network_hash && !empty($coin->installed) && !empty($coin->auto_ready) && !empty($coin->rpcport)) {
 		$remote = new WalletRPC($coin);
 		if ($remote)
 			$info = $remote->getmininginfo();
@@ -120,4 +148,3 @@ echo <<<end
 <br><br><br><br><br><br><br><br><br><br>
 
 end;
-

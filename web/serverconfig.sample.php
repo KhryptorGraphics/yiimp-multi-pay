@@ -169,6 +169,7 @@ $cold_wallet_table = array(
 $configFixedPoolFees = array(
         'zr5' => 2.0,
         'scrypt' => 20.0,
+        'spacescrypt' => 0.8,
         'sha256' => 5.0,
 );
 
@@ -176,16 +177,16 @@ $configFixedPoolFees = array(
 $configFixedPoolFeesSolo = array(
 		'zr5' => 2.0,
         'scrypt' => 2.0,
+        'spacescrypt' => 0.8,
         'sha256' => 5.0,
 );
 
 // Sample custom stratum ports
 $configCustomPorts = array(
-//	'x11' => 7000,
+	'spacescrypt' => 12478,
 );
 
 // mBTC Coefs per algo (default is 1.0)
 $configAlgoNormCoef = array(
-//	'x11' => 5.0,
+	'spacescrypt' => 1.0,
 );
-

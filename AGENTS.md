@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus MCP
 
-This project is indexed by GitNexus as **yiimp** (21596 symbols, 45630 relationships, 300 execution flows).
+This project is indexed by GitNexus as **yiimp** (21677 symbols, 45869 relationships, 300 execution flows).
 
 ## Always Start Here
 

@@ -382,11 +382,14 @@ class WalletRPC {
 		// Bitcoin RPC
         	switch ($method) {
 			case 'getinfo':
+				$res = false;
 				if ($this->hasGetInfo) {
 					$res = $this->rpc->__call($method,$params);
-				} else {
+				}
+				if (!$res) {
 					$miningInfo = $this->rpc->getmininginfo();
 					if (!$miningInfo) { $res = false; break; }
+					$res = array();
 					$res["blocks"] = arraySafeVal($miningInfo,"blocks");
 					$res["difficulty"] = arraySafeVal($miningInfo,"difficulty");
 					$res["testnet"] = "main" != arraySafeVal($miningInfo,"chain");

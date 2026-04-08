@@ -1,8 +1,5 @@
 <?php
 
-require_once('/etc/yiimp/serverconfig.php');
-require_once('yaamp/defaultconfig.php');
-
 class CronjobController extends CommonController
 {
 	private function monitorApache()
@@ -135,6 +132,7 @@ class CronjobController extends CommonController
 
 			case 1:
 				if(!YAAMP_PRODUCTION) break;
+				if(!YAAMP_ALLOW_EXCHANGE || !is_readable('/etc/yiimp/keys.php')) break;
 
 				getBitstampBalances();
 				getCexIoBalances();
@@ -144,6 +142,7 @@ class CronjobController extends CommonController
 
 			case 2:
 				if(!YAAMP_PRODUCTION) break;
+				if(!YAAMP_ALLOW_EXCHANGE || !is_readable('/etc/yiimp/keys.php')) break;
 
 				doBinanceTrading();
 				doKuCoinTrading();
@@ -232,4 +231,3 @@ class CronjobController extends CommonController
 	}
 
 }
-

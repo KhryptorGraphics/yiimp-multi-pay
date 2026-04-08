@@ -1,0 +1,14 @@
+[Unit]
+Description=YiiMP Stratum SHA256
+After=network.target
+Wants=network.target
+
+[Service]
+ExecStart=/usr/local/bin/stratum /etc/yiimp/stratum/sha256.conf
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

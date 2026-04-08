@@ -26,6 +26,30 @@ return array(
 		'site'=>array(
 			'class'=>'modules.site.SiteController',
 		),
+		'api'=>array(
+			'class'=>'modules.api.ApiController',
+		),
+		'stats'=>array(
+			'class'=>'modules.stats.StatsController',
+		),
+		'trading'=>array(
+			'class'=>'modules.trading.TradingController',
+		),
+		'bench'=>array(
+			'class'=>'modules.bench.BenchController',
+		),
+		'coin'=>array(
+			'class'=>'modules.coin.CoinController',
+		),
+		'nicehash'=>array(
+			'class'=>'modules.nicehash.NicehashController',
+		),
+		'market'=>array(
+			'class'=>'modules.market.MarketController',
+		),
+		'admin'=>array(
+			'class'=>'modules.admin.AdminController',
+		),
 		'explorer'=>array(
 			'class'=>'modules.explorer.ExplorerController',
 		),

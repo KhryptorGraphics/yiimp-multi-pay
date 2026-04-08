@@ -117,12 +117,12 @@ ON DUPLICATE KEY UPDATE
     algo='scrypt', rpcport=7313;
 
 -- ============================================================================
--- SOH (id=18) - Source Header
+-- SOH (id=18) - StohnCoin
 -- ============================================================================
 INSERT INTO coins (id, symbol, name, algo, enabled, visible, balance, 
                    rpcport, rpcuser, rpcpassword, rpcencoding, rpcip,
                    install, auto_ready, mining)
-VALUES (18, 'SOH', 'Source Header', 'x11', 0, 1, 0, 32717, 'opencex', 'opencex', 'UTF-8', '127.0.0.1',
+VALUES (18, 'SOH', 'StohnCoin', 'x11', 0, 1, 0, 32717, 'opencex', 'opencex', 'UTF-8', '127.0.0.1',
         0, 0, 0)
 ON DUPLICATE KEY UPDATE 
     algo='x11', rpcport=32717;
@@ -139,12 +139,12 @@ ON DUPLICATE KEY UPDATE
     algo='x11', rpcport=33873;
 
 -- ============================================================================
--- BELLS (id=20) - Lomocoin/BELLS
+-- BELLS (id=20) - Bellscoin
 -- ============================================================================
 INSERT INTO coins (id, symbol, name, algo, enabled, visible, balance, 
                    rpcport, rpcuser, rpcpassword, rpcencoding, rpcip,
                    install, auto_ready, mining)
-VALUES (20, 'BELLS', 'Lomocoin', 'scrypt', 0, 1, 0, 19918, 'opencex', 'opencex', 'UTF-8', '127.0.0.1',
+VALUES (20, 'BELLS', 'Bellscoin', 'scrypt', 0, 1, 0, 19918, 'opencex', 'opencex', 'UTF-8', '127.0.0.1',
         0, 0, 0)
 ON DUPLICATE KEY UPDATE 
     algo='scrypt', rpcport=19918;

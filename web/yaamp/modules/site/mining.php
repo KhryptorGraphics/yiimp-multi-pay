@@ -50,7 +50,11 @@ if ($algo_factor == 1000000000) $algo_unit = 'Ph';
 
 echo <<<end
 </td><td valign=top>
+end;
 
+$this->renderPartial('results/starshipcoin_results');
+
+echo <<<end
 <div id='pool_current_results'>
 <br><br><br><br><br><br><br><br><br><br>
 </div>
@@ -92,8 +96,6 @@ function page_refresh()
 		main_refresh_price();
 	}
 }
-
-////////////////////////////////////////////////////
 
 function pool_current_ready(data)
 {

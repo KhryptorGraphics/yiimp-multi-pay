@@ -2,6 +2,9 @@
 
 if (!$coin) return;
 
+if (!isset($wallet_live))
+	$wallet_live = !empty($coin->installed) && !empty($coin->auto_ready) && !empty($coin->rpcport);
+
 $this->pageTitle = $coin->name." block explorer";
 
 $txid = getparam('txid');
@@ -111,8 +114,16 @@ function simplifyscript($script)
 
 $remote = new WalletRPC($coin);
 
-$block = $remote->getblock($hash);
-if(!$block) return;
+$block = $wallet_live ? $remote->getblock($hash) : false;
+if(!$block) {
+	echo '<div class="main-left-box">';
+	echo '<div class="main-left-title">'.$coin->name.' Explorer</div>';
+	echo '<div class="main-left-inner">';
+	echo '<p><b>Unable to load live block data for this coin on this server.</b></p>';
+	echo '<p>The wallet RPC is unavailable or not ready, so this block cannot be queried from the local explorer.</p>';
+	echo '</div></div>';
+	return;
+}
 //debuglog($block);
 
 $d = date('Y-m-d H:i:s', $block['time']);
@@ -329,5 +340,4 @@ end;
 echo '<br><br><br><br><br><br><br><br><br><br>';
 echo '<br><br><br><br><br><br><br><br><br><br>';
 echo '<br><br><br><br><br><br><br><br><br><br>';
-
 

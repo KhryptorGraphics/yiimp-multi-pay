@@ -97,6 +97,11 @@ static void scrypt_hash(const char* input, char* output, uint32_t len)
 	scrypt_1024_1_1_256((unsigned char *)input, (unsigned char *)output);
 }
 
+static void spacescrypt_hash(const char* input, char* output, uint32_t len)
+{
+	spacescrypt_1024_1_1_256((const unsigned char *)input, (unsigned char *)output);
+}
+
 static void scryptn_hash(const char* input, char* output, uint32_t len)
 {
 	time_t time_table[][2] =
@@ -215,6 +220,7 @@ YAAMP_ALGO g_algos[] =
 	{"renesis", renesis_hash, 1, 0, 0},
 	{"rinhash", rinhash_hash, 1, 0, 0},
 	{"scrypt", scrypt_hash, 0x10000, 0, 0},
+	{"spacescrypt", spacescrypt_hash, 0x10000, 0, 0},
 	{"scryptn", scryptn_hash, 0x10000, 0, 0},
 	{"sha256", sha256_double_hash, 1, 0, 0},
 	{"sha256d", sha256_double_hash, 1, 0, 0},

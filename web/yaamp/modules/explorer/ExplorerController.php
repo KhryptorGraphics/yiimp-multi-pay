@@ -6,6 +6,23 @@ class ExplorerController extends CommonController
 {
 	public $defaultAction='index';
 
+	protected function renderPartialOnce($partial, $data=null)
+	{
+		static $rendered_partials = array();
+
+		if (isset($rendered_partials[$partial])) {
+			return;
+		}
+
+		$rendered_partials[$partial] = true;
+		echo $this->renderPartial($partial, $data, true);
+	}
+
+	protected function hasLiveWallet($coin)
+	{
+		return $coin && !empty($coin->installed) && !empty($coin->auto_ready) && !empty($coin->rpcport);
+	}
+
 	/////////////////////////////////////////////////
 
 	public function run($actionID)
@@ -57,6 +74,7 @@ class ExplorerController extends CommonController
 
 		$id = getiparam('id');
 		$coin = getdbo('db_coins', $id);
+		$wallet_live = $this->hasLiveWallet($coin);
 		if($coin && $coin->no_explorer) {
 			$link = $coin->link_explorer;
 			//$txid = gethexparam('txid');
@@ -66,7 +84,7 @@ class ExplorerController extends CommonController
 			die("Block explorer disabled, please use <a href=\"$link\">$link</a>");
 		}
 		$height = getiparam('height');
-		if($coin && intval($height)>0)
+		if($wallet_live && intval($height)>0)
 		{
 			$remote = new WalletRPC($coin);
 			$hash = $remote->getblockhash(intval($height));
@@ -76,7 +94,7 @@ class ExplorerController extends CommonController
 
 		$txid = gethexparam('txid');
 		$q = gethexparam('q');
-		if (strlen($q) >= 32 && ctype_xdigit($q)) {
+		if ($wallet_live && strlen($q) >= 32 && ctype_xdigit($q)) {
 			$remote = new WalletRPC($coin);
 			$block = $remote->getblock($q);
 			if ($block) {
@@ -87,7 +105,7 @@ class ExplorerController extends CommonController
 			}
 		}
 
-		if($coin && !empty($txid))
+		if($wallet_live && !empty($txid))
 		{
 			$remote = new WalletRPC($coin);
 			$tx = $remote->getrawtransaction($txid, 1);
@@ -97,10 +115,10 @@ class ExplorerController extends CommonController
 		}
 
 		if($coin && !empty($hash))
-			$this->render('block', array('coin'=>$coin, 'hash'=>$hash));
+			$this->render('block', array('coin'=>$coin, 'hash'=>$hash, 'wallet_live'=>$wallet_live));
 
 		else if($coin)
-			$this->render('coin', array('coin'=>$coin));
+			$this->render('coin', array('coin'=>$coin, 'wallet_live'=>$wallet_live));
 
 		else
 			$this->render('index');
@@ -143,7 +161,7 @@ class ExplorerController extends CommonController
 		$id = getiparam('id');
 		$coin = getdbo('db_coins', $id);
 		if ($coin)
-			$this->renderPartial('graph', array('coin'=>$coin));
+			$this->renderPartialOnce('graph', array('coin'=>$coin));
 		else
 			echo "[]";
 	}
@@ -156,7 +174,7 @@ class ExplorerController extends CommonController
 		$id = getiparam('id');
 		$coin = getdbo('db_coins', $id);
 		if ($coin)
-			$this->renderPartial('peers', array('coin'=>$coin));
+			$this->renderPartialOnce('peers', array('coin'=>$coin, 'wallet_live'=>$this->hasLiveWallet($coin)));
 	}
 
 }
