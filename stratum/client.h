@@ -68,6 +68,7 @@ public:
 	char password[1024];
 	char worker[1024];
 
+	std::map<std::string, std::string> coin_address_map;
 	std::vector<std::string> coins_mining_list;
 	std::vector<std::string> coins_ignore_list;
 
@@ -183,4 +184,3 @@ void *client_thread(void *p);
 void db_check_user_input(char* input);
 
 //void source_prune();
-

@@ -38,9 +38,9 @@ class db_accounts extends CActiveRecord
 		dborun("DELETE FROM shares WHERE userid=".$user->id);
 		dborun("DELETE FROM workers WHERE userid=".$user->id);
 		dborun("DELETE FROM earnings WHERE userid=".$user->id);
+		dborun("DELETE FROM account_addresses WHERE account_id=".$user->id);
 		dborun("UPDATE blocks SET userid=NULL WHERE userid=".$user->id);
 		dborun("DELETE FROM payouts WHERE account_id=".$user->id);
 		return $user->delete();
 	}
 }
-

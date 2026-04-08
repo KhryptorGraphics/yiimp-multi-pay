@@ -22,6 +22,7 @@
 #include <dirent.h>
 #include <algorithm>
 #include <functional>
+#include <map>
 #include <string>
 
 #include <iostream>

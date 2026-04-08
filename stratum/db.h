@@ -21,6 +21,7 @@ void db_update_remotes(YAAMP_DB *db);
 
 //int db_find_user(YAAMP_DB *db, YAAMP_CLIENT *client);
 void db_add_user(YAAMP_DB *db, YAAMP_CLIENT *client);
+void db_save_user_coin_addresses(YAAMP_DB *db, YAAMP_CLIENT *client);
 
 void db_add_worker(YAAMP_DB *db, YAAMP_CLIENT *client);
 void db_clear_worker(YAAMP_DB *db, YAAMP_CLIENT *client);
@@ -32,4 +33,3 @@ void db_init_user_coinid(YAAMP_DB *db, YAAMP_CLIENT *client);
 void db_store_stats(YAAMP_DB *db, YAAMP_CLIENT *client, json_value *stats);
 
 void db_update_renters(YAAMP_DB *db);
-

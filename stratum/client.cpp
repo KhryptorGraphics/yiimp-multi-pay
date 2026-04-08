@@ -294,6 +294,12 @@ bool client_authorize(YAAMP_CLIENT *client, json_value *json_params)
 
 		return false;
 	}
+
+	if (!g_autoexchange) {
+		CommonLock(&g_db_mutex);
+		db_save_user_coin_addresses(g_db, client);
+		CommonUnlock(&g_db_mutex);
+	}
 	
 	client_send_result(client, "true");
 	client_send_difficulty(client, client->difficulty_actual);

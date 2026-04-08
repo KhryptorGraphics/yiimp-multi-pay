@@ -45,6 +45,7 @@ void db_add_user(YAAMP_DB *db, YAAMP_CLIENT *client)
 	bool guest = false;
 	int gift = -1;
 	client->solo = false;
+	client->coin_address_map.clear();
 
 	std::string symbol;
 	std::vector<std::string> commandlist;
@@ -74,6 +75,12 @@ void db_add_user(YAAMP_DB *db, YAAMP_CLIENT *client)
 			// set list of specific coins to skip in selection
 			else if (command.at(0) == "nc") {
 				string_tokenize(command.at(1), '/', client->coins_ignore_list);
+			}
+			else if (command.at(0).rfind("addr_", 0) == 0) {
+				std::string address_symbol = command.at(0).substr(5);
+				if (!address_symbol.empty() && !command.at(1).empty()) {
+					client->coin_address_map[address_symbol] = command.at(1);
+				}
 			}
 #ifdef ALLOW_CUSTOM_DONATIONS
 			else if (command.at(0) == "g") {
@@ -228,6 +235,70 @@ void db_update_workers(YAAMP_DB *db)
 	g_list_client.Leave();
 }
 
+static YAAMP_COIND *db_find_coind_by_symbol(const char *symbol)
+{
+	for(CLI li = g_list_coind.first; li; li = li->next)
+	{
+		YAAMP_COIND *coind = (YAAMP_COIND *)li->data;
+		if(coind->deleted) continue;
+		if(!strcmp(coind->symbol, symbol) || !strcmp(coind->symbol2, symbol))
+			return coind;
+	}
+
+	return NULL;
+}
+
+static void db_store_user_coin_address(YAAMP_DB *db, int userid, int coinid, const char *address)
+{
+	if (!userid || !coinid || !address || !address[0])
+		return;
+
+	char clean_address[1024] = { 0 };
+	snprintf(clean_address, sizeof(clean_address), "%s", address);
+	db_clean_string(db, clean_address);
+	if (!clean_address[0])
+		return;
+
+	uint32_t now = (uint32_t) time(NULL);
+	db_query(db, "INSERT INTO account_addresses (account_id, coinid, address, created, updated) "
+		"VALUES (%d, %d, '%s', %u, %u) "
+		"ON DUPLICATE KEY UPDATE address='%s', updated=%u",
+		userid, coinid, clean_address, now, now, clean_address, now);
+}
+
+void db_save_user_coin_addresses(YAAMP_DB *db, YAAMP_CLIENT *client)
+{
+	if (!client || !client->userid)
+		return;
+
+	if (client->coinid && client->username[0]) {
+		db_store_user_coin_address(db, client->userid, client->coinid, client->username);
+	}
+
+	for (const auto &entry : client->coin_address_map)
+	{
+		char symbol[32] = { 0 };
+		char address[1024] = { 0 };
+		snprintf(symbol, sizeof(symbol), "%s", entry.first.c_str());
+		snprintf(address, sizeof(address), "%s", entry.second.c_str());
+
+		db_clean_string(db, symbol);
+		db_clean_string(db, address);
+		db_check_coin_symbol(db, symbol);
+		if (!symbol[0] || !address[0])
+			continue;
+
+		YAAMP_COIND *coind = db_find_coind_by_symbol(symbol);
+		if (!coind)
+			continue;
+
+		if (!coind_validate_user_address(coind, address))
+			continue;
+
+		db_store_user_coin_address(db, client->userid, coind->id, address);
+	}
+}
+
 void db_init_user_coinid(YAAMP_DB *db, YAAMP_CLIENT *client)
 {
 	if (!client->userid)
@@ -239,4 +310,3 @@ void db_init_user_coinid(YAAMP_DB *db, YAAMP_CLIENT *client)
 		db_query(db, "UPDATE accounts SET coinid=%d WHERE id=%d AND IFNULL(coinid,0) = 0",
 			client->coinid, client->userid);
 }
-
